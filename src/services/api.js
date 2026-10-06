@@ -30,6 +30,42 @@ export const normalizeEvent = (e, idx = 0) => {
   };
 };
 
+export const fetchSavedEvents = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/events`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.success && Array.isArray(data.events)) {
+      return data.events.map(normalizeEvent);
+    }
+  } catch (err) {
+    console.warn('Could not fetch saved events from server:', err.message);
+  }
+  return null;
+};
+
+export const clearSavedEventsApi = async () => {
+  try {
+    await fetch(`${API_BASE_URL}/events`, { method: 'DELETE' });
+  } catch (err) {
+    console.warn('Could not clear events on server:', err.message);
+  }
+};
+
+export const updateEventStatusApi = async (id, status) => {
+  try {
+    await fetch(`${API_BASE_URL}/events/${encodeURIComponent(id)}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+  } catch (err) {
+    console.warn('Could not update status on server:', err.message);
+  }
+};
+
 export const searchEventsBatch = async ({ cities = [], types = [], startDate = null, days = 14 } = {}) => {
   const locations = Array.isArray(cities) ? cities : [cities].filter(Boolean);
   const eventTypes = Array.isArray(types) ? types : [types].filter(Boolean);

@@ -6,6 +6,7 @@ import EventTable from '../components/EventTable';
 import EventDetail from './EventDetail';
 import RunAgentModal from '../components/RunAgentModal';
 import { SearchInput, Select, Button } from '../components/common';
+import { fetchSavedEvents, clearSavedEventsApi } from '../services/api';
 
 const STORAGE_KEY = 'eventscout_api_events';
 
@@ -27,9 +28,22 @@ const Home = () => {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
 
+  // Sync with global window for debugging
   useEffect(() => {
     window.events = events;
   }, [events]);
+
+  // Load saved events from PostgreSQL Database on mount
+  useEffect(() => {
+    fetchSavedEvents().then((dbEvents) => {
+      if (dbEvents && dbEvents.length > 0) {
+        setEvents(dbEvents);
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(dbEvents));
+        } catch {}
+      }
+    });
+  }, []);
 
   // Client-side filtering
   const filteredEvents = useMemo(() => {
@@ -62,6 +76,7 @@ const Home = () => {
   const handleClearEvents = () => {
     setEvents([]);
     localStorage.removeItem(STORAGE_KEY);
+    clearSavedEventsApi();
   };
 
   if (selectedEvent) {
