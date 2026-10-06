@@ -28,10 +28,6 @@ const Home = () => {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
 
-  // Sync with global window for debugging
-  useEffect(() => {
-    window.events = events;
-  }, [events]);
 
   // Load saved events from PostgreSQL Database on mount
   useEffect(() => {

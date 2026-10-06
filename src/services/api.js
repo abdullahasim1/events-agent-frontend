@@ -20,8 +20,8 @@ export const normalizeEvent = (e, idx = 0) => {
     proposalDeadline: e.proposalDeadline || '',
     notes: e.notes || e.description || '',
     status: e.status || 'Upcoming',
-    date: e.date || 'TBA',
-    time: e.time || 'TBA',
+    date: e.date || '',
+    time: e.time || '',
     venue: e.venue || (e.city ? `${e.city} Venue` : 'Venue TBA'),
     link: e.link || e.ticketUrl || '#',
     ticketUrl: e.ticketUrl || e.link || '#',
@@ -54,18 +54,6 @@ export const clearSavedEventsApi = async () => {
   }
 };
 
-export const updateEventStatusApi = async (id, status) => {
-  try {
-    await fetch(`${API_BASE_URL}/events/${encodeURIComponent(id)}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    });
-  } catch (err) {
-    console.warn('Could not update status on server:', err.message);
-  }
-};
-
 export const searchEventsBatch = async ({ cities = [], types = [], startDate = null, days = 14 } = {}) => {
   const locations = Array.isArray(cities) ? cities : [cities].filter(Boolean);
   const eventTypes = Array.isArray(types) ? types : [types].filter(Boolean);
@@ -74,7 +62,6 @@ export const searchEventsBatch = async ({ cities = [], types = [], startDate = n
     throw new Error('Please select at least one location and one event category.');
   }
 
-  // Exactly 1 single network request from browser!
   const res = await fetch(`${API_BASE_URL}/events`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -96,11 +83,3 @@ export const searchEventsBatch = async ({ cities = [], types = [], startDate = n
     return key && !seen.has(key) && seen.add(key);
   });
 };
-
-export const triggerAgentRun = ({ location = '', city = '', eventType = '', type = '', startDate = '', days = 14 } = {}) =>
-  searchEventsBatch({
-    cities: [location || city].filter(Boolean),
-    types: [eventType || type].filter(Boolean),
-    startDate,
-    days,
-  }).then((events) => ({ success: true, count: events.length, events }));
