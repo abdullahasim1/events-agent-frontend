@@ -73,9 +73,19 @@ const EventDetail = ({ event: propEvent, onBack: propOnBack }) => {
   }
 
   const fullLocation = [event.location || event.city, event.venue].filter(Boolean).join(' — ') || '-';
-  const contact = event.contactInfo || event.email || (event.ticketUrl && !event.ticketUrl.includes('google.com/search') ? event.ticketUrl : null);
+
+  // Contact Info with intelligent fallback to Ticket / Event URL
+  const rawContact = String(event.contactInfo || event.email || '').trim();
+  const isInvalidContact = !rawContact || /not available|n\/a|^-$/i.test(rawContact);
+  const fallbackUrl = (event.ticketUrl && !event.ticketUrl.includes('google.com/search')) ? event.ticketUrl : (event.link || event.ticketUrl || null);
+  const contact = isInvalidContact ? fallbackUrl : rawContact;
   const isEmail = contact?.includes('@') && !contact?.startsWith('http');
   const isUrl = contact?.startsWith('http');
+
+  // Time handling: avoid TBA
+  const rawTime = String(event.time || '').trim();
+  const eventTime = !rawTime || /^(tba|tbh|-)$/i.test(rawTime) ? '09:00 AM - 05:00 PM' : rawTime;
+
   const status = event.status || 'Upcoming';
   const isPending = /need|contact|pending/i.test(status);
 
@@ -101,16 +111,19 @@ const EventDetail = ({ event: propEvent, onBack: propOnBack }) => {
             <InfoField label="Event Type" value={event.type || event.category} />
             <InfoField label="Organization" value={event.organization || event.organizer || event.source} />
             <InfoField label="Date" value={formatLongDate(event.date)} />
+            <InfoField label="Time" value={eventTime} />
             <InfoField label="Location" value={fullLocation} />
             <InfoField label="Audience Type" value={event.audienceType} />
             <InfoField label="Opportunity Type" value={event.opportunityType || event.category || event.type} />
             <InfoField label="Contact Info">
               {isEmail ? (
-                <a href={`mailto:${contact}`} className="text-[12.5px] font-semibold text-[#487358] hover:underline">{contact}</a>
+                <a href={`mailto:${contact}`} className="text-[12.5px] font-semibold text-[#487358] hover:underline" title={contact}>
+                  {contact}
+                </a>
               ) : isUrl ? (
-                <a href={contact} target="_blank" rel="noreferrer" className="text-[12.5px] font-semibold text-[#487358] hover:underline inline-flex items-center gap-1">
-                  <span>Visit Event Page</span>
-                  <ExternalLink className="w-3 h-3" />
+                <a href={contact} target="_blank" rel="noreferrer" className="text-[12.5px] font-semibold text-[#487358] hover:underline inline-flex items-center gap-1.5" title={contact}>
+                  <span>Visit Event Link (Get Contact)</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               ) : (
                 <p className="text-[12.5px] font-semibold text-[#080808]">{contact || '-'}</p>
@@ -139,7 +152,7 @@ const EventDetail = ({ event: propEvent, onBack: propOnBack }) => {
 
           {/* Card 4: Logistics */}
           <DetailCard title="Logistics">
-            <InfoField label="Set-up Time" value={event.setupTime || (event.time && event.time !== 'TBA' ? event.time : 'TBD')} />
+            <InfoField label="Set-up / Operating Time" value={event.setupTime || eventTime} />
             <InfoField label="Electricity Ordered?" value={event.electricityOrdered ? 'Yes' : '-'} />
             <InfoField label="Misc Info" value={event.miscInfo} />
           </DetailCard>

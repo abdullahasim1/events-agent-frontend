@@ -106,7 +106,14 @@ const EventTable = ({ events = [], loading = false, onViewEvent = () => {}, onOp
                     <td className="px-2 align-middle truncate font-medium text-zinc-900" title={e.title || e.name}>
                       {e.title || e.name}
                     </td>
-                    <td className="px-2 align-middle whitespace-nowrap">{formatDate(e.date)}</td>
+                    <td className="px-2 align-middle whitespace-nowrap">
+                      <div className="flex flex-col justify-center">
+                        <span className="leading-tight">{formatDate(e.date)}</span>
+                        <span className="text-[11px] text-zinc-500 font-normal leading-tight mt-0.5">
+                          {e.time && !/^(tba|tbh|-)$/i.test(String(e.time).trim()) ? e.time : '09:00 AM - 05:00 PM'}
+                        </span>
+                      </div>
+                    </td>
                     <td className="px-2 align-middle truncate" title={e.location || e.city}>
                       {e.location || e.city}
                     </td>
