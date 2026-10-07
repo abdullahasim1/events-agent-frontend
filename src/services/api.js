@@ -54,22 +54,39 @@ export const clearSavedEventsApi = async () => {
   }
 };
 
+export const runDefaultAgent = async ({ startDate = null } = {}) => {
+  const res = await fetch(`${API_BASE_URL}/events`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      startDate: startDate || null,
+      days: 7,
+    }),
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || `Agent run failed (${res.status})`);
+
+  const events = (data.events || []).map(normalizeEvent);
+  const seen = new Set();
+  return events.filter((ev) => {
+    const key = `${(ev.title || '').trim().toLowerCase()}|${(ev.date || '').trim()}`;
+    return key && !seen.has(key) && seen.add(key);
+  });
+};
+
 export const searchEventsBatch = async ({ cities = [], types = [], startDate = null, days = 14 } = {}) => {
   const locations = Array.isArray(cities) ? cities : [cities].filter(Boolean);
   const eventTypes = Array.isArray(types) ? types : [types].filter(Boolean);
-
-  if (!locations.length || !eventTypes.length) {
-    throw new Error('Please select at least one location and one event category.');
-  }
 
   const res = await fetch(`${API_BASE_URL}/events`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
-      locations,
-      eventTypes,
+      locations: locations.length ? locations : undefined,
+      eventTypes: eventTypes.length ? eventTypes : undefined,
       startDate: startDate || null,
-      days: Number(days) || 14,
+      days: Number(days) || 7,
     }),
   });
 

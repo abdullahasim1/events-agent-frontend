@@ -1,12 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Sparkles, Trash2 } from 'lucide-react';
+import { Sparkles, Trash2, Loader2 } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import EventTable from '../components/EventTable';
 import EventDetail from './EventDetail';
-import RunAgentModal from '../components/RunAgentModal';
 import { SearchInput, Select, Button } from '../components/common';
-import { fetchSavedEvents, clearSavedEventsApi } from '../services/api';
+import { fetchSavedEvents, clearSavedEventsApi, runDefaultAgent } from '../services/api';
 
 const STORAGE_KEY = 'eventscout_api_events';
 
@@ -26,8 +25,7 @@ const Home = () => {
   const [typeFilter, setTypeFilter] = useState('All Types');
   const [activeTab, setActiveTab] = useState('events');
   const [selectedEvent, setSelectedEvent] = useState(null);
-  const [isRunModalOpen, setIsRunModalOpen] = useState(false);
-
+  const [isRunning, setIsRunning] = useState(false);
 
   // Load saved events from PostgreSQL Database on mount
   useEffect(() => {
@@ -55,18 +53,29 @@ const Home = () => {
   const statusOptions = useMemo(() => ['All Status', ...new Set(events.map((e) => e.status).filter(Boolean))], [events]);
   const typeOptions = useMemo(() => ['All Types', ...new Set(events.map((e) => e.type || e.category).filter(Boolean))], [events]);
 
-  const handleAgentSuccess = (newEvents = []) => {
-    const items = Array.isArray(newEvents) ? newEvents : [newEvents];
-    setEvents((prev) => {
-      const existingKeys = new Set(prev.map((e) => `${(e.title || '').trim().toLowerCase()}|${(e.date || '').trim()}`));
-      const toAdd = items.filter((e) => {
-        const k = `${(e.title || '').trim().toLowerCase()}|${(e.date || '').trim()}`;
-        return k && !existingKeys.has(k) && existingKeys.add(k);
+  // 1-Click Run Agent without modal
+  const handleRunAgent = async () => {
+    if (isRunning) return;
+    setIsRunning(true);
+    try {
+      const newEvents = await runDefaultAgent({ startDate: '2026-10-07' });
+      const items = Array.isArray(newEvents) ? newEvents : [newEvents];
+      setEvents((prev) => {
+        const existingKeys = new Set(prev.map((e) => `${(e.title || '').trim().toLowerCase()}|${(e.date || '').trim()}`));
+        const toAdd = items.filter((e) => {
+          const k = `${(e.title || '').trim().toLowerCase()}|${(e.date || '').trim()}`;
+          return k && !existingKeys.has(k) && existingKeys.add(k);
+        });
+        const updated = [...toAdd, ...prev];
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
+        return updated;
       });
-      const updated = [...toAdd, ...prev];
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
-      return updated;
-    });
+    } catch (err) {
+      console.error('Agent run failed:', err.message);
+      alert(err.message || 'Failed to run agent.');
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   const handleClearEvents = () => {
@@ -95,7 +104,7 @@ const Home = () => {
             <SearchInput
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              onEnter={() => setIsRunModalOpen(true)}
+              onEnter={handleRunAgent}
               placeholder="Search by events..."
               containerClassName="w-[330px] h-[42px] mr-[10px]"
             />
@@ -105,28 +114,30 @@ const Home = () => {
 
           <div className="flex items-center gap-2">
             {events.length > 0 && (
-              <Button variant="danger" size="lg" icon={Trash2} onClick={handleClearEvents} title="Clear all events from table">
+              <Button variant="danger" size="lg" icon={Trash2} onClick={handleClearEvents} title="Clear all events from table" disabled={isRunning}>
                 Clear
               </Button>
             )}
-            <Button variant="primary" size="lg" icon={Sparkles} onClick={() => setIsRunModalOpen(true)}>
-              Run Agent
+            <Button
+              variant="primary"
+              size="lg"
+              icon={isRunning ? Loader2 : Sparkles}
+              onClick={handleRunAgent}
+              disabled={isRunning}
+              className={isRunning ? 'opacity-80 cursor-wait' : ''}
+            >
+              {isRunning ? 'Scanning Next 7 Days...' : 'Run Agent'}
             </Button>
           </div>
         </div>
 
-        <EventTable events={filteredEvents} loading={false} onViewEvent={setSelectedEvent} onOpenRunModal={() => setIsRunModalOpen(true)} />
-      </div>
-
-      {isRunModalOpen && (
-        <RunAgentModal
-          key={`${search.trim()}-${isRunModalOpen}`}
-          isOpen={isRunModalOpen}
-          onClose={() => setIsRunModalOpen(false)}
-          onAgentSuccess={handleAgentSuccess}
-          initialCity={search.trim()}
+        <EventTable
+          events={filteredEvents}
+          loading={isRunning}
+          onViewEvent={setSelectedEvent}
+          onOpenRunModal={handleRunAgent}
         />
-      )}
+      </div>
     </div>
   );
 };
