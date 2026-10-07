@@ -1,11 +1,25 @@
 import { useState } from "react";
-import { ArrowUpDown, Eye, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Sparkles } from "lucide-react";
+import {
+  ArrowUpDown,
+  Eye,
+  ChevronsLeft,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsRight,
+  Sparkles,
+} from "lucide-react";
 import { Select, Button } from "./common";
 
 const formatDate = (val) => {
   if (!val || val === "TBA") return "TBA";
   const d = new Date(val);
-  return isNaN(d) ? val : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return isNaN(d)
+    ? val
+    : d.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
 };
 
 const COLS = [
@@ -15,15 +29,25 @@ const COLS = [
   { key: "actions", label: "Actions", width: "11.5%", sortable: false },
 ];
 
-const EventTable = ({ events = [], loading = false, onViewEvent = () => {}, onOpenRunModal = () => {} }) => {
+const EventTable = ({
+  events = [],
+  loading = false,
+  onViewEvent = () => {},
+  onOpenRunModal = () => {},
+}) => {
   const [selected, setSelected] = useState([]);
   const [sort, setSort] = useState({ field: "proximityTier", asc: true });
   const [perPage, setPerPage] = useState(50);
   const [page, setPage] = useState(1);
 
-  const toggleAll = (e) => setSelected(e.target.checked ? events.map((ev) => ev.id) : []);
-  const toggleOne = (id) => setSelected((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
-  const handleSort = (field) => setSort((s) => ({ field, asc: s.field === field ? !s.asc : true }));
+  const toggleAll = (e) =>
+    setSelected(e.target.checked ? events.map((ev) => ev.id) : []);
+  const toggleOne = (id) =>
+    setSelected((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
+    );
+  const handleSort = (field) =>
+    setSort((s) => ({ field, asc: s.field === field ? !s.asc : true }));
 
   const sorted = [...events].sort((a, b) => {
     // If default sorting, rank nearest first (tier 1 -> 2 -> 3 -> 4)
@@ -69,12 +93,16 @@ const EventTable = ({ events = [], loading = false, onViewEvent = () => {}, onOp
                 {COLS.map((col) => (
                   <th
                     key={col.key}
-                    onClick={col.sortable ? () => handleSort(col.key) : undefined}
+                    onClick={
+                      col.sortable ? () => handleSort(col.key) : undefined
+                    }
                     className={`px-2 font-normal align-middle ${col.sortable ? "cursor-pointer hover:opacity-70" : ""}`}
                   >
                     <div className="flex items-center gap-2">
                       <span>{col.label}</span>
-                      {col.sortable && <ArrowUpDown className="w-2.5 h-2.5 text-[#7a7a7a]" />}
+                      {col.sortable && (
+                        <ArrowUpDown className="w-2.5 h-2.5 text-[#7a7a7a]" />
+                      )}
                     </div>
                   </th>
                 ))}
@@ -86,23 +114,32 @@ const EventTable = ({ events = [], loading = false, onViewEvent = () => {}, onOp
                   <td colSpan={5} className="py-16 text-center text-zinc-500">
                     <div className="flex flex-col items-center justify-center gap-2.5">
                       <div className="w-5 h-5 border-2 border-[#82aa92] border-t-transparent rounded-full animate-spin" />
-                      <span>Scanning cities & streaming events live...</span>
+                      <span>Finding events...</span>
                     </div>
                   </td>
                 </tr>
               ) : pagedEvents.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-16 text-center text-zinc-500">
-                    <p className="font-medium text-[#1a1a1a]">No events found</p>
-                    <p className="text-xs mt-1 mb-2">Click "Run Agent" to discover live events.</p>
-                    <Button variant="primary" size="sm" icon={Sparkles} onClick={onOpenRunModal}>
+                    <p className="font-medium text-[#1a1a1a]">
+                      No events found
+                    </p>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon={Sparkles}
+                      onClick={onOpenRunModal}
+                    >
                       Run Agent Now
                     </Button>
                   </td>
                 </tr>
               ) : (
                 pagedEvents.map((e) => (
-                  <tr key={e.id} className="h-[50px] border-b border-[#ececec] hover:bg-[#fafafa] transition-colors">
+                  <tr
+                    key={e.id}
+                    className="h-[50px] border-b border-[#ececec] hover:bg-[#fafafa] transition-colors"
+                  >
                     <td className="px-[15px] align-middle">
                       <input
                         type="checkbox"
@@ -111,15 +148,28 @@ const EventTable = ({ events = [], loading = false, onViewEvent = () => {}, onOp
                         className="w-[13px] h-[13px] rounded-[3px] bg-[#d4d4d4] checked:bg-[#86af96] cursor-pointer"
                       />
                     </td>
-                    <td className="px-2 align-middle truncate font-medium text-zinc-900" title={e.title || e.name}>
+                    <td
+                      className="px-2 align-middle truncate font-medium text-zinc-900"
+                      title={e.title || e.name}
+                    >
                       {e.title || e.name}
                     </td>
-                    <td className="px-2 align-middle whitespace-nowrap">{formatDate(e.date)}</td>
-                    <td className="px-2 align-middle truncate" title={e.location || e.city}>
+                    <td className="px-2 align-middle whitespace-nowrap">
+                      {formatDate(e.date)}
+                    </td>
+                    <td
+                      className="px-2 align-middle truncate"
+                      title={e.location || e.city}
+                    >
                       {e.location || e.city}
                     </td>
                     <td className="pl-6 pr-2 align-middle">
-                      <button type="button" onClick={() => onViewEvent(e)} title="View Details" className="text-[#444343] hover:text-black cursor-pointer">
+                      <button
+                        type="button"
+                        onClick={() => onViewEvent(e)}
+                        title="View Details"
+                        className="text-[#444343] hover:text-black cursor-pointer"
+                      >
                         <Eye className="w-4 h-4" />
                       </button>
                     </td>
@@ -150,14 +200,32 @@ const EventTable = ({ events = [], loading = false, onViewEvent = () => {}, onOp
 
         <div className="flex items-center gap-6">
           <span className="text-[12px] text-zinc-500">
-            {total > 0 ? `${start + 1}-${Math.min(start + perPage, total)} of ${total}` : "0 of 0"}
+            {total > 0
+              ? `${start + 1}-${Math.min(start + perPage, total)} of ${total}`
+              : "0 of 0"}
           </span>
           <div className="flex items-center gap-1.5">
             {[
-              { icon: ChevronsLeft, onClick: () => setPage(1), dis: safePage === 1 },
-              { icon: ChevronLeft, onClick: () => setPage((p) => Math.max(1, p - 1)), dis: safePage === 1 },
-              { icon: ChevronRight, onClick: () => setPage((p) => Math.min(totalPages, p + 1)), dis: safePage >= totalPages || total === 0 },
-              { icon: ChevronsRight, onClick: () => setPage(totalPages), dis: safePage >= totalPages || total === 0 },
+              {
+                icon: ChevronsLeft,
+                onClick: () => setPage(1),
+                dis: safePage === 1,
+              },
+              {
+                icon: ChevronLeft,
+                onClick: () => setPage((p) => Math.max(1, p - 1)),
+                dis: safePage === 1,
+              },
+              {
+                icon: ChevronRight,
+                onClick: () => setPage((p) => Math.min(totalPages, p + 1)),
+                dis: safePage >= totalPages || total === 0,
+              },
+              {
+                icon: ChevronsRight,
+                onClick: () => setPage(totalPages),
+                dis: safePage >= totalPages || total === 0,
+              },
             ].map((b, i) => (
               <button
                 key={i}
@@ -175,11 +243,21 @@ const EventTable = ({ events = [], loading = false, onViewEvent = () => {}, onOp
 
       {/* Footer */}
       <footer className="mt-auto pt-6 pb-2 flex items-center justify-between text-[11px] text-zinc-500">
-        <div>&copy; 2026, <span className="text-[#558066] font-medium">eventscout</span>. All Rights Reserved.</div>
+        <div>
+          &copy; 2026,{" "}
+          <span className="text-[#558066] font-medium">eventscout</span>. All
+          Rights Reserved.
+        </div>
         <div className="flex items-center gap-6">
-          <a href="#" className="hover:text-black">License</a>
-          <a href="#" className="hover:text-black">Terms of Use</a>
-          <a href="#" className="hover:text-black">Privacy Policy</a>
+          <a href="#" className="hover:text-black">
+            License
+          </a>
+          <a href="#" className="hover:text-black">
+            Terms of Use
+          </a>
+          <a href="#" className="hover:text-black">
+            Privacy Policy
+          </a>
         </div>
       </footer>
     </div>
