@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Sparkles, Trash2, Loader2 } from "lucide-react";
 import Sidebar from "../components/Sidebar";
-import Header from "../components/Header";
 import EventTable from "../components/EventTable";
 import EventDetail from "./EventDetail";
 import { SearchInput, Select, Button } from "../components/common";
@@ -195,8 +194,7 @@ const Home = () => {
 
   const runButtonLabel = () => {
     if (!isRunning) return "Run Agent";
-    if (runProgress)
-      return `Scanning ${runProgress.done + 1}/${runProgress.total}: ${runProgress.currentCity}…`;
+    if (runProgress) return `Fetching …`;
     return "Starting…";
   };
 
@@ -214,8 +212,6 @@ const Home = () => {
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
       <div className="flex-1 min-w-0 h-full overflow-y-auto flex flex-col pl-[25px] pr-[25px] pt-5 pb-5">
-        <Header globalSearch={search} onGlobalSearchChange={setSearch} />
-
         <div className="mt-[26px]">
           <h1 className="text-[16px] leading-[25px] text-[rgba(8,8,8,0.87)] [-webkit-text-stroke-width:0.29px]">
             Events
@@ -275,8 +271,7 @@ const Home = () => {
           <div className="mt-4 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800 animate-pulse">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-              <span className="font-semibold">⚡ Live Streaming Events:</span>
-              <span>Scanning</span>
+              <span className="font-semibold">⚡ Fetching Events:</span>
             </div>
             <div className="font-medium text-emerald-700">
               {events.length} events discovered so far
