@@ -1,4 +1,4 @@
-import { Camera, LogOut } from "lucide-react";
+import { Camera } from "lucide-react";
 
 const Sidebar = ({ activeTab = "events", onTabChange = () => {} }) => (
   <aside className="w-60 shrink-0 h-[calc(100vh-20px)] sticky top-[10px] my-[10px] ml-[10px] flex flex-col justify-between bg-[#1a1a1a] text-white rounded-[14px] p-3 select-none">
@@ -52,10 +52,7 @@ const Sidebar = ({ activeTab = "events", onTabChange = () => {} }) => (
       <button
         type="button"
         className="h-8 w-full flex items-center gap-2.5 px-2.5 rounded-lg text-[11px] text-zinc-300 hover:bg-white/5 cursor-pointer"
-      >
-        <LogOut className="w-3.5 h-3.5" />
-        <span>Log Out</span>
-      </button>
+      ></button>
     </div>
   </aside>
 );
