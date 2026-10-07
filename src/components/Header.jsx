@@ -1,7 +1,13 @@
 import { Bell } from "lucide-react";
 import { SearchInput } from "./common";
 
-const Header = ({ globalSearch = "", onGlobalSearchChange = () => {} }) => (
+const DEFAULT_USER = {
+  name: "Ali Hassan",
+  email: "alihassan@gmail.com",
+  avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80",
+};
+
+const Header = ({ globalSearch = "", onGlobalSearchChange = () => {}, user = DEFAULT_USER }) => (
   <header className="h-[37px] flex items-center justify-between select-none">
     <SearchInput
       value={globalSearch}
