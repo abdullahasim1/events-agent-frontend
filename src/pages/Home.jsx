@@ -82,9 +82,8 @@ const Home = () => {
     });
   };
 
-  // 1-Click Run Agent: per-city chunked run with progress.
-  // Each city runs in its own backend call (sequentially) so every call
-  // stays inside the serverless timeout; events appear progressively.
+  // 1-Click Run Agent: Run cities in parallel batches (3 at a time)
+  // As soon as each city finishes, events stream into the UI immediately!
   const handleRunAgent = async () => {
     if (isRunning) return;
     setIsRunning(true);
@@ -94,24 +93,31 @@ const Home = () => {
       const matrix = await getRunCities();
       const cities = matrix.cities;
       const total = cities.length;
-      const failed = [];
-      for (let i = 0; i < total; i++) {
-        const city = cities[i];
-        setRunProgress({ done: i, total, currentCity: city });
-        try {
-          const chunk = await runCityChunk({ city, startDate, days });
-          if (chunk.events.length > 0) mergeEvents(chunk.events);
-        } catch (chunkErr) {
-          console.warn(`Chunk failed for ${city}:`, chunkErr.message);
-          failed.push(city);
-        }
-        setRunProgress({ done: i + 1, total, currentCity: city });
-      }
-      if (failed.length > 0) {
-        alert(`Run finished, but ${failed.length} ${failed.length === 1 ? 'city' : 'cities'} failed: ${failed.join(', ')}. Run again to retry them.`);
+      let completedCount = 0;
+
+      setRunProgress({ done: 0, total, currentCity: 'Starting scan…' });
+
+      // Process 3 cities in parallel at a time (Fast & safe for Vercel)
+      const CONCURRENCY = 3;
+      for (let i = 0; i < cities.length; i += CONCURRENCY) {
+        const batch = cities.slice(i, i + CONCURRENCY);
+        await Promise.all(
+          batch.map(async (city) => {
+            try {
+              const chunk = await runCityChunk({ city, startDate, days });
+              if (chunk.events && chunk.events.length > 0) {
+                mergeEvents(chunk.events); // Instantly shows in UI!
+              }
+            } catch (chunkErr) {
+              console.warn(`Chunk failed for ${city}:`, chunkErr.message);
+            } finally {
+              completedCount++;
+              setRunProgress({ done: completedCount, total, currentCity: city });
+            }
+          })
+        );
       }
     } catch (err) {
-      // Fallback: chunked endpoints not available on the backend yet — use legacy single run
       console.warn('Chunked run unavailable, falling back to single run:', err.message);
       try {
         const newEvents = await runDefaultAgent({ startDate });
@@ -186,6 +192,19 @@ const Home = () => {
             </Button>
           </div>
         </div>
+
+        {isRunning && runProgress && (
+          <div className="mt-4 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800 animate-pulse">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+              <span className="font-semibold">⚡ Live Streaming Events:</span>
+              <span>Scanning {runProgress.currentCity} ({runProgress.done}/{runProgress.total} cities scanned)</span>
+            </div>
+            <div className="font-medium text-emerald-700">
+              {events.length} events discovered so far
+            </div>
+          </div>
+        )}
 
         <EventTable
           events={filteredEvents}

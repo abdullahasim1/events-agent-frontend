@@ -81,12 +81,12 @@ const EventTable = ({ events = [], loading = false, onViewEvent = () => {}, onOp
               </tr>
             </thead>
             <tbody className="text-[13px] text-[#444343]">
-              {loading ? (
+              {loading && pagedEvents.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-16 text-center text-zinc-500">
                     <div className="flex flex-col items-center justify-center gap-2.5">
                       <div className="w-5 h-5 border-2 border-[#82aa92] border-t-transparent rounded-full animate-spin" />
-                      <span>Loading events from API...</span>
+                      <span>Scanning cities & streaming events live...</span>
                     </div>
                   </td>
                 </tr>
