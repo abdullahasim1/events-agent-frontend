@@ -145,7 +145,8 @@ const Home = () => {
       const total = cities.length;
       let completedCount = 0;
 
-      setRunProgress({ done: 0, total, currentCity: "Starting scan…" });
+      const firstBatchLabel = cities.slice(0, 3).join(", ");
+      setRunProgress({ done: 0, total, currentCity: firstBatchLabel });
 
       // Process 3 cities in parallel at a time (Fast & safe for Vercel)
       const CONCURRENCY = 3;
@@ -255,7 +256,11 @@ const Home = () => {
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
               <span className="font-semibold">⚡ Live Streaming:</span>
-              <span>Scanning {runProgress.currentCity} ({runProgress.done}/{runProgress.total} cities)</span>
+              <span>
+                {runProgress.done === 0
+                  ? "Scanning target cities…"
+                  : `Scanned ${runProgress.done} of ${runProgress.total} cities (${runProgress.currentCity})`}
+              </span>
             </div>
             <div className="flex items-center gap-3">
               {newlyAddedCount > 0 && (
