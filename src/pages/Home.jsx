@@ -244,7 +244,6 @@ const Home = () => {
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
               <span className="font-semibold">⚡ Fetching Events:</span>
-              <span>Scanning {runProgress.currentCity} ({runProgress.done}/{runProgress.total} cities)</span>
             </div>
             <div className="font-medium text-emerald-700">
               {events.length} events discovered so far
