@@ -1,13 +1,19 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Sparkles, Trash2, Loader2 } from 'lucide-react';
-import Sidebar from '../components/Sidebar';
-import Header from '../components/Header';
-import EventTable from '../components/EventTable';
-import EventDetail from './EventDetail';
-import { SearchInput, Select, Button } from '../components/common';
-import { fetchSavedEvents, clearSavedEventsApi, runDefaultAgent, getRunCities, runCityChunk } from '../services/api';
+import { useState, useMemo, useEffect } from "react";
+import { Sparkles, Trash2, Loader2 } from "lucide-react";
+import Sidebar from "../components/Sidebar";
+import Header from "../components/Header";
+import EventTable from "../components/EventTable";
+import EventDetail from "./EventDetail";
+import { SearchInput, Select, Button } from "../components/common";
+import {
+  fetchSavedEvents,
+  clearSavedEventsApi,
+  runDefaultAgent,
+  getRunCities,
+  runCityChunk,
+} from "../services/api";
 
-const STORAGE_KEY = 'eventscout_api_events';
+const STORAGE_KEY = "eventscout_api_events";
 
 const getSavedEvents = () => {
   try {
@@ -23,10 +29,10 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 
 const Home = () => {
   const [events, setEvents] = useState(getSavedEvents);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All Status');
-  const [typeFilter, setTypeFilter] = useState('All Types');
-  const [activeTab, setActiveTab] = useState('events');
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All Status");
+  const [typeFilter, setTypeFilter] = useState("All Types");
+  const [activeTab, setActiveTab] = useState("events");
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
   const [runProgress, setRunProgress] = useState(null); // { done, total, currentCity }
@@ -48,36 +54,71 @@ const Home = () => {
     if (!isRunning) return;
     const onBeforeUnload = (e) => {
       e.preventDefault();
-      e.returnValue = '';
+      e.returnValue = "";
     };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [isRunning]);
 
   // Client-side filtering
   const filteredEvents = useMemo(() => {
     const q = search.trim().toLowerCase();
     return events.filter((e) => {
-      const matchSearch = !q || [e.title, e.name, e.city, e.location, e.category, e.type, e.description].some((v) => v?.toLowerCase().includes(q));
-      const matchStatus = statusFilter === 'All Status' || e.status?.toLowerCase() === statusFilter.toLowerCase();
-      const matchType = typeFilter === 'All Types' || (e.type || e.category)?.toLowerCase().includes(typeFilter.toLowerCase());
+      const matchSearch =
+        !q ||
+        [
+          e.title,
+          e.name,
+          e.city,
+          e.location,
+          e.category,
+          e.type,
+          e.description,
+        ].some((v) => v?.toLowerCase().includes(q));
+      const matchStatus =
+        statusFilter === "All Status" ||
+        e.status?.toLowerCase() === statusFilter.toLowerCase();
+      const matchType =
+        typeFilter === "All Types" ||
+        (e.type || e.category)
+          ?.toLowerCase()
+          .includes(typeFilter.toLowerCase());
       return matchSearch && matchStatus && matchType;
     });
   }, [events, search, statusFilter, typeFilter]);
 
-  const statusOptions = useMemo(() => ['All Status', ...new Set(events.map((e) => e.status).filter(Boolean))], [events]);
-  const typeOptions = useMemo(() => ['All Types', ...new Set(events.map((e) => e.type || e.category).filter(Boolean))], [events]);
+  const statusOptions = useMemo(
+    () => [
+      "All Status",
+      ...new Set(events.map((e) => e.status).filter(Boolean)),
+    ],
+    [events],
+  );
+  const typeOptions = useMemo(
+    () => [
+      "All Types",
+      ...new Set(events.map((e) => e.type || e.category).filter(Boolean)),
+    ],
+    [events],
+  );
 
   // Merge newly found events into state (dedupe by title|date), persist to localStorage
   const mergeEvents = (items) => {
     setEvents((prev) => {
-      const existingKeys = new Set(prev.map((e) => `${(e.title || '').trim().toLowerCase()}|${(e.date || '').trim()}`));
+      const existingKeys = new Set(
+        prev.map(
+          (e) =>
+            `${(e.title || "").trim().toLowerCase()}|${(e.date || "").trim()}`,
+        ),
+      );
       const toAdd = items.filter((e) => {
-        const k = `${(e.title || '').trim().toLowerCase()}|${(e.date || '').trim()}`;
+        const k = `${(e.title || "").trim().toLowerCase()}|${(e.date || "").trim()}`;
         return k && !existingKeys.has(k) && existingKeys.add(k);
       });
       const updated = [...toAdd, ...prev];
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      } catch {}
       return updated;
     });
   };
@@ -95,7 +136,7 @@ const Home = () => {
       const total = cities.length;
       let completedCount = 0;
 
-      setRunProgress({ done: 0, total, currentCity: 'Starting scan…' });
+      setRunProgress({ done: 0, total, currentCity: "Starting scan…" });
 
       // Process 3 cities in parallel at a time (Fast & safe for Vercel)
       const CONCURRENCY = 3;
@@ -112,20 +153,27 @@ const Home = () => {
               console.warn(`Chunk failed for ${city}:`, chunkErr.message);
             } finally {
               completedCount++;
-              setRunProgress({ done: completedCount, total, currentCity: city });
+              setRunProgress({
+                done: completedCount,
+                total,
+                currentCity: city,
+              });
             }
-          })
+          }),
         );
       }
     } catch (err) {
-      console.warn('Chunked run unavailable, falling back to single run:', err.message);
+      console.warn(
+        "Chunked run unavailable, falling back to single run:",
+        err.message,
+      );
       try {
         const newEvents = await runDefaultAgent({ startDate });
         const items = Array.isArray(newEvents) ? newEvents : [newEvents];
         mergeEvents(items);
       } catch (fallbackErr) {
-        console.error('Agent run failed:', fallbackErr.message);
-        alert(fallbackErr.message || 'Failed to run agent.');
+        console.error("Agent run failed:", fallbackErr.message);
+        alert(fallbackErr.message || "Failed to run agent.");
       }
     } finally {
       setIsRunning(false);
@@ -134,20 +182,31 @@ const Home = () => {
   };
 
   const handleClearEvents = () => {
-    if (!window.confirm('Delete ALL events from the database? This cannot be undone.')) return;
+    if (
+      !window.confirm(
+        "Delete ALL events from the database? This cannot be undone.",
+      )
+    )
+      return;
     setEvents([]);
     localStorage.removeItem(STORAGE_KEY);
     clearSavedEventsApi();
   };
 
   const runButtonLabel = () => {
-    if (!isRunning) return 'Run Agent';
-    if (runProgress) return `Scanning ${runProgress.done + 1}/${runProgress.total}: ${runProgress.currentCity}…`;
-    return 'Starting…';
+    if (!isRunning) return "Run Agent";
+    if (runProgress)
+      return `Scanning ${runProgress.done + 1}/${runProgress.total}: ${runProgress.currentCity}…`;
+    return "Starting…";
   };
 
   if (selectedEvent) {
-    return <EventDetail event={selectedEvent} onBack={() => setSelectedEvent(null)} />;
+    return (
+      <EventDetail
+        event={selectedEvent}
+        onBack={() => setSelectedEvent(null)}
+      />
+    );
   }
 
   return (
@@ -158,7 +217,9 @@ const Home = () => {
         <Header globalSearch={search} onGlobalSearchChange={setSearch} />
 
         <div className="mt-[26px]">
-          <h1 className="text-[16px] leading-[25px] text-[rgba(8,8,8,0.87)] [-webkit-text-stroke-width:0.29px]">Events</h1>
+          <h1 className="text-[16px] leading-[25px] text-[rgba(8,8,8,0.87)] [-webkit-text-stroke-width:0.29px]">
+            Events
+          </h1>
         </div>
 
         <div className="mt-[26px] flex items-center justify-between gap-3 flex-wrap">
@@ -170,13 +231,30 @@ const Home = () => {
               placeholder="Search by events..."
               containerClassName="w-[330px] h-[42px] mr-[10px]"
             />
-            <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={statusOptions} containerClassName="w-[155px] h-[42px] mr-[14px]" />
-            <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} options={typeOptions} containerClassName="w-[155px] h-[42px]" />
+            <Select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              options={statusOptions}
+              containerClassName="w-[155px] h-[42px] mr-[14px]"
+            />
+            <Select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              options={typeOptions}
+              containerClassName="w-[155px] h-[42px]"
+            />
           </div>
 
           <div className="flex items-center gap-2">
             {events.length > 0 && (
-              <Button variant="danger" size="lg" icon={Trash2} onClick={handleClearEvents} title="Clear all events from table" disabled={isRunning}>
+              <Button
+                variant="danger"
+                size="lg"
+                icon={Trash2}
+                onClick={handleClearEvents}
+                title="Clear all events from table"
+                disabled={isRunning}
+              >
                 Clear
               </Button>
             )}
@@ -186,7 +264,7 @@ const Home = () => {
               icon={isRunning ? Loader2 : Sparkles}
               onClick={handleRunAgent}
               disabled={isRunning}
-              className={isRunning ? 'opacity-80 cursor-wait' : ''}
+              className={isRunning ? "opacity-80 cursor-wait" : ""}
             >
               {runButtonLabel()}
             </Button>
@@ -198,7 +276,7 @@ const Home = () => {
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
               <span className="font-semibold">⚡ Live Streaming Events:</span>
-              <span>Scanning {runProgress.currentCity} ({runProgress.done}/{runProgress.total} cities scanned)</span>
+              <span>Scanning</span>
             </div>
             <div className="font-medium text-emerald-700">
               {events.length} events discovered so far
