@@ -36,7 +36,7 @@ const EventTable = ({
   onOpenRunModal = () => {},
 }) => {
   const [selected, setSelected] = useState([]);
-  const [sort, setSort] = useState({ field: "proximityTier", asc: true });
+  const [sort, setSort] = useState({ field: "latest", asc: false });
   const [perPage, setPerPage] = useState(50);
   const [page, setPage] = useState(1);
 
@@ -50,7 +50,17 @@ const EventTable = ({
     setSort((s) => ({ field, asc: s.field === field ? !s.asc : true }));
 
   const sorted = [...events].sort((a, b) => {
-    // If default sorting, rank nearest first (tier 1 -> 2 -> 3 -> 4)
+    // 1. If sorted by latest (Default): Show newly fetched live items at the top
+    if (sort.field === "latest") {
+      if (a.isNew && !b.isNew) return -1;
+      if (!a.isNew && b.isNew) return 1;
+      // Proximity Tier Secondary (Near first)
+      const tierDiff = (Number(a.proximityTier) || 99) - (Number(b.proximityTier) || 99);
+      if (tierDiff !== 0) return tierDiff;
+      return String(a.date || "").localeCompare(String(b.date || ""));
+    }
+
+    // 2. Proximity Tier Sort
     if (sort.field === "proximityTier") {
       const tierA = Number(a.proximityTier) || 99;
       const tierB = Number(b.proximityTier) || 99;
@@ -138,7 +148,9 @@ const EventTable = ({
                 pagedEvents.map((e) => (
                   <tr
                     key={e.id}
-                    className="h-[50px] border-b border-[#ececec] hover:bg-[#fafafa] transition-colors"
+                    className={`h-[50px] border-b border-[#ececec] transition-colors ${
+                      e.isNew ? "bg-emerald-50/60 hover:bg-emerald-50" : "hover:bg-[#fafafa]"
+                    }`}
                   >
                     <td className="px-[15px] align-middle">
                       <input
@@ -152,7 +164,14 @@ const EventTable = ({
                       className="px-2 align-middle truncate font-medium text-zinc-900"
                       title={e.title || e.name}
                     >
-                      {e.title || e.name}
+                      <div className="flex items-center gap-2">
+                        {e.isNew && (
+                          <span className="shrink-0 px-1.5 py-0.5 text-[9.5px] font-bold text-emerald-700 bg-emerald-100 rounded">
+                            NEW
+                          </span>
+                        )}
+                        <span className="truncate">{e.title || e.name}</span>
+                      </div>
                     </td>
                     <td className="px-2 align-middle whitespace-nowrap">
                       {formatDate(e.date)}

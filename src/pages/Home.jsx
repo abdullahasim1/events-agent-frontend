@@ -100,6 +100,8 @@ const Home = () => {
     [events],
   );
 
+  const [newlyAddedCount, setNewlyAddedCount] = useState(0);
+
   // Merge newly found events into state (dedupe by title|date), persist to localStorage
   const mergeEvents = (items) => {
     setEvents((prev) => {
@@ -109,10 +111,18 @@ const Home = () => {
             `${(e.title || "").trim().toLowerCase()}|${(e.date || "").trim()}`,
         ),
       );
-      const toAdd = items.filter((e) => {
-        const k = `${(e.title || "").trim().toLowerCase()}|${(e.date || "").trim()}`;
-        return k && !existingKeys.has(k) && existingKeys.add(k);
-      });
+      const toAdd = items
+        .filter((e) => {
+          const k = `${(e.title || "").trim().toLowerCase()}|${(e.date || "").trim()}`;
+          return k && !existingKeys.has(k) && existingKeys.add(k);
+        })
+        .map((e) => ({ ...e, isNew: true })); // Tag as newly added!
+
+      if (toAdd.length > 0) {
+        setNewlyAddedCount((c) => c + toAdd.length);
+      }
+
+      // Prepend to top of table immediately
       const updated = [...toAdd, ...prev];
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
@@ -126,6 +136,7 @@ const Home = () => {
   const handleRunAgent = async () => {
     if (isRunning) return;
     setIsRunning(true);
+    setNewlyAddedCount(0);
     const startDate = todayStr();
     const days = 7;
     try {
@@ -145,7 +156,7 @@ const Home = () => {
             try {
               const chunk = await runCityChunk({ city, startDate, days });
               if (chunk.events && chunk.events.length > 0) {
-                mergeEvents(chunk.events); // Instantly shows in UI!
+                mergeEvents(chunk.events); // Instantly prepends to UI top!
               }
             } catch (chunkErr) {
               console.warn(`Chunk failed for ${city}:`, chunkErr.message);
@@ -243,10 +254,18 @@ const Home = () => {
           <div className="mt-4 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800 animate-pulse">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-              <span className="font-semibold">⚡ Fetching Events</span>
+              <span className="font-semibold">⚡ Live Streaming:</span>
+              <span>Scanning {runProgress.currentCity} ({runProgress.done}/{runProgress.total} cities)</span>
             </div>
-            <div className="font-medium text-emerald-700">
-              {events.length} events discovered so far
+            <div className="flex items-center gap-3">
+              {newlyAddedCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 font-bold text-[11px] animate-bounce">
+                  +{newlyAddedCount} New Added!
+                </span>
+              )}
+              <span className="font-medium text-emerald-700">
+                {events.length} total events
+              </span>
             </div>
           </div>
         )}
