@@ -17,7 +17,7 @@ const COLS = [
 
 const EventTable = ({ events = [], loading = false, onViewEvent = () => {}, onOpenRunModal = () => {} }) => {
   const [selected, setSelected] = useState([]);
-  const [sort, setSort] = useState({ field: "date", asc: true });
+  const [sort, setSort] = useState({ field: "proximityTier", asc: true });
   const [perPage, setPerPage] = useState(50);
   const [page, setPage] = useState(1);
 
@@ -26,6 +26,14 @@ const EventTable = ({ events = [], loading = false, onViewEvent = () => {}, onOp
   const handleSort = (field) => setSort((s) => ({ field, asc: s.field === field ? !s.asc : true }));
 
   const sorted = [...events].sort((a, b) => {
+    // If default sorting, rank nearest first (tier 1 -> 2 -> 3 -> 4)
+    if (sort.field === "proximityTier") {
+      const tierA = Number(a.proximityTier) || 99;
+      const tierB = Number(b.proximityTier) || 99;
+      if (tierA !== tierB) return sort.asc ? tierA - tierB : tierB - tierA;
+      return String(a.date || "").localeCompare(String(b.date || ""));
+    }
+
     const valA = String(a[sort.field] || a.name || "").toLowerCase();
     const valB = String(b[sort.field] || b.name || "").toLowerCase();
     return sort.asc ? valA.localeCompare(valB) : valB.localeCompare(valA);
