@@ -6,7 +6,6 @@ import EventDetail from "./EventDetail";
 import { SearchInput, Select, Button } from "../components/common";
 import {
   fetchSavedEvents,
-  clearSavedEventsApi,
   runDefaultAgent,
   getRunCities,
   runCityChunk,
@@ -180,18 +179,6 @@ const Home = () => {
     }
   };
 
-  const handleClearEvents = () => {
-    if (
-      !window.confirm(
-        "Delete ALL events from the database? This cannot be undone.",
-      )
-    )
-      return;
-    setEvents([]);
-    localStorage.removeItem(STORAGE_KEY);
-    clearSavedEventsApi();
-  };
-
   const runButtonLabel = () => {
     if (!isRunning) return "Run Agent";
     if (runProgress) return `Fetching …`;
@@ -240,52 +227,37 @@ const Home = () => {
               containerClassName="w-[155px] h-[42px]"
             />
           </div>
+          <Button
+            variant="primary"
+            size="lg"
+            icon={isRunning ? Loader2 : Sparkles}
+            onClick={handleRunAgent}
+            disabled={isRunning}
+            className={isRunning ? "opacity-80 cursor-wait" : ""}
+          >
+            {runButtonLabel()}
+          </Button>
+        </div>
+      </div>
 
+      {isRunning && runProgress && (
+        <div className="mt-4 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800 animate-pulse">
           <div className="flex items-center gap-2">
-            {events.length > 0 && (
-              <Button
-                variant="danger"
-                size="lg"
-                icon={Trash2}
-                onClick={handleClearEvents}
-                title="Clear all events from table"
-                disabled={isRunning}
-              >
-                Clear
-              </Button>
-            )}
-            <Button
-              variant="primary"
-              size="lg"
-              icon={isRunning ? Loader2 : Sparkles}
-              onClick={handleRunAgent}
-              disabled={isRunning}
-              className={isRunning ? "opacity-80 cursor-wait" : ""}
-            >
-              {runButtonLabel()}
-            </Button>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+            <span className="font-semibold">⚡ Fetching Events:</span>
+          </div>
+          <div className="font-medium text-emerald-700">
+            {events.length} events discovered so far
           </div>
         </div>
+      )}
 
-        {isRunning && runProgress && (
-          <div className="mt-4 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800 animate-pulse">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-              <span className="font-semibold">⚡ Fetching Events:</span>
-            </div>
-            <div className="font-medium text-emerald-700">
-              {events.length} events discovered so far
-            </div>
-          </div>
-        )}
-
-        <EventTable
-          events={filteredEvents}
-          loading={isRunning}
-          onViewEvent={setSelectedEvent}
-          onOpenRunModal={handleRunAgent}
-        />
-      </div>
+      <EventTable
+        events={filteredEvents}
+        loading={isRunning}
+        onViewEvent={setSelectedEvent}
+        onOpenRunModal={handleRunAgent}
+      />
     </div>
   );
 };
