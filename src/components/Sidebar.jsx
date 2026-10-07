@@ -48,12 +48,7 @@ const Sidebar = ({ activeTab = "events", onTabChange = () => {} }) => (
       </nav>
     </div>
 
-    <div className="pt-2 border-t border-white/10">
-      <button
-        type="button"
-        className="h-8 w-full flex items-center gap-2.5 px-2.5 rounded-lg text-[11px] text-zinc-300 hover:bg-white/5 cursor-pointer"
-      ></button>
-    </div>
+    <div className="pt-2 border-t border-white/10"></div>
   </aside>
 );
 
