@@ -238,26 +238,27 @@ const Home = () => {
             {runButtonLabel()}
           </Button>
         </div>
+
+        {isRunning && runProgress && (
+          <div className="mt-4 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800 animate-pulse">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+              <span className="font-semibold">⚡ Fetching Events:</span>
+              <span>Scanning {runProgress.currentCity} ({runProgress.done}/{runProgress.total} cities)</span>
+            </div>
+            <div className="font-medium text-emerald-700">
+              {events.length} events discovered so far
+            </div>
+          </div>
+        )}
+
+        <EventTable
+          events={filteredEvents}
+          loading={isRunning}
+          onViewEvent={setSelectedEvent}
+          onOpenRunModal={handleRunAgent}
+        />
       </div>
-
-      {isRunning && runProgress && (
-        <div className="mt-4 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800 animate-pulse">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-            <span className="font-semibold">⚡ Fetching Events:</span>
-          </div>
-          <div className="font-medium text-emerald-700">
-            {events.length} events discovered so far
-          </div>
-        </div>
-      )}
-
-      <EventTable
-        events={filteredEvents}
-        loading={isRunning}
-        onViewEvent={setSelectedEvent}
-        onOpenRunModal={handleRunAgent}
-      />
     </div>
   );
 };
