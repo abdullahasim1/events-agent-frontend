@@ -255,12 +255,7 @@ const Home = () => {
           <div className="mt-4 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800 animate-pulse">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-              <span className="font-semibold">⚡ Live Streaming:</span>
-              <span>
-                {runProgress.done === 0
-                  ? "Scanning target cities…"
-                  : `Scanned ${runProgress.done} of ${runProgress.total} cities (${runProgress.currentCity})`}
-              </span>
+              <span className="font-semibold text-[13px]">Live Streaming</span>
             </div>
             <div className="flex items-center gap-3">
               {newlyAddedCount > 0 && (
