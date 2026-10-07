@@ -70,3 +70,44 @@ export const runDefaultAgent = async ({ startDate = null } = {}) => {
     return key && !seen.has(key) && seen.add(key);
   });
 };
+
+// Fetch the city/type matrix the backend will run. Used for per-city chunked runs.
+export const getRunCities = async () => {
+  const res = await fetch(`${API_BASE_URL}/events/run/cities`, {
+    headers: { Accept: 'application/json' },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success || !Array.isArray(data.cities)) {
+    throw new Error(data.message || `Could not load run cities (${res.status})`);
+  }
+  return data; // { success, cities, types, defaultDays }
+};
+
+// Run the agent for a single city chunk (keeps each backend call inside its timeout).
+// Returns { city, status, eventsFound, events }.
+export const runCityChunk = async ({ city, startDate = null, days = 7 } = {}) => {
+  const res = await fetch(`${API_BASE_URL}/events/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      city,
+      startDate: startDate || null,
+      days,
+    }),
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || `Chunk failed for ${city} (${res.status})`);
+
+  const events = (data.events || []).map(normalizeEvent);
+  const seen = new Set();
+  return {
+    city: data.city || city,
+    status: data.status || 'done',
+    eventsFound: data.eventsFound ?? events.length,
+    events: events.filter((ev) => {
+      const key = `${(ev.title || '').trim().toLowerCase()}|${(ev.date || '').trim()}`;
+      return key && !seen.has(key) && seen.add(key);
+    }),
+  };
+};

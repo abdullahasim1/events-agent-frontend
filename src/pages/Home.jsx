@@ -5,7 +5,7 @@ import Header from '../components/Header';
 import EventTable from '../components/EventTable';
 import EventDetail from './EventDetail';
 import { SearchInput, Select, Button } from '../components/common';
-import { fetchSavedEvents, clearSavedEventsApi, runDefaultAgent } from '../services/api';
+import { fetchSavedEvents, clearSavedEventsApi, runDefaultAgent, getRunCities, runCityChunk } from '../services/api';
 
 const STORAGE_KEY = 'eventscout_api_events';
 
@@ -18,6 +18,9 @@ const getSavedEvents = () => {
   }
 };
 
+// Today's date in YYYY-MM-DD (used as the default run start date)
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
 const Home = () => {
   const [events, setEvents] = useState(getSavedEvents);
   const [search, setSearch] = useState('');
@@ -26,6 +29,7 @@ const Home = () => {
   const [activeTab, setActiveTab] = useState('events');
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [runProgress, setRunProgress] = useState(null); // { done, total, currentCity }
 
   // Load saved events from PostgreSQL Database on mount
   useEffect(() => {
@@ -38,6 +42,17 @@ const Home = () => {
       }
     });
   }, []);
+
+  // Warn before closing the tab mid-run (a full run takes minutes)
+  useEffect(() => {
+    if (!isRunning) return;
+    const onBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isRunning]);
 
   // Client-side filtering
   const filteredEvents = useMemo(() => {
@@ -53,35 +68,76 @@ const Home = () => {
   const statusOptions = useMemo(() => ['All Status', ...new Set(events.map((e) => e.status).filter(Boolean))], [events]);
   const typeOptions = useMemo(() => ['All Types', ...new Set(events.map((e) => e.type || e.category).filter(Boolean))], [events]);
 
-  // 1-Click Run Agent without modal
+  // Merge newly found events into state (dedupe by title|date), persist to localStorage
+  const mergeEvents = (items) => {
+    setEvents((prev) => {
+      const existingKeys = new Set(prev.map((e) => `${(e.title || '').trim().toLowerCase()}|${(e.date || '').trim()}`));
+      const toAdd = items.filter((e) => {
+        const k = `${(e.title || '').trim().toLowerCase()}|${(e.date || '').trim()}`;
+        return k && !existingKeys.has(k) && existingKeys.add(k);
+      });
+      const updated = [...toAdd, ...prev];
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  };
+
+  // 1-Click Run Agent: per-city chunked run with progress.
+  // Each city runs in its own backend call (sequentially) so every call
+  // stays inside the serverless timeout; events appear progressively.
   const handleRunAgent = async () => {
     if (isRunning) return;
     setIsRunning(true);
+    const startDate = todayStr();
+    const days = 7;
     try {
-      const newEvents = await runDefaultAgent({ startDate: '2026-10-07' });
-      const items = Array.isArray(newEvents) ? newEvents : [newEvents];
-      setEvents((prev) => {
-        const existingKeys = new Set(prev.map((e) => `${(e.title || '').trim().toLowerCase()}|${(e.date || '').trim()}`));
-        const toAdd = items.filter((e) => {
-          const k = `${(e.title || '').trim().toLowerCase()}|${(e.date || '').trim()}`;
-          return k && !existingKeys.has(k) && existingKeys.add(k);
-        });
-        const updated = [...toAdd, ...prev];
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
-        return updated;
-      });
+      const matrix = await getRunCities();
+      const cities = matrix.cities;
+      const total = cities.length;
+      const failed = [];
+      for (let i = 0; i < total; i++) {
+        const city = cities[i];
+        setRunProgress({ done: i, total, currentCity: city });
+        try {
+          const chunk = await runCityChunk({ city, startDate, days });
+          if (chunk.events.length > 0) mergeEvents(chunk.events);
+        } catch (chunkErr) {
+          console.warn(`Chunk failed for ${city}:`, chunkErr.message);
+          failed.push(city);
+        }
+        setRunProgress({ done: i + 1, total, currentCity: city });
+      }
+      if (failed.length > 0) {
+        alert(`Run finished, but ${failed.length} ${failed.length === 1 ? 'city' : 'cities'} failed: ${failed.join(', ')}. Run again to retry them.`);
+      }
     } catch (err) {
-      console.error('Agent run failed:', err.message);
-      alert(err.message || 'Failed to run agent.');
+      // Fallback: chunked endpoints not available on the backend yet — use legacy single run
+      console.warn('Chunked run unavailable, falling back to single run:', err.message);
+      try {
+        const newEvents = await runDefaultAgent({ startDate });
+        const items = Array.isArray(newEvents) ? newEvents : [newEvents];
+        mergeEvents(items);
+      } catch (fallbackErr) {
+        console.error('Agent run failed:', fallbackErr.message);
+        alert(fallbackErr.message || 'Failed to run agent.');
+      }
     } finally {
       setIsRunning(false);
+      setRunProgress(null);
     }
   };
 
   const handleClearEvents = () => {
+    if (!window.confirm('Delete ALL events from the database? This cannot be undone.')) return;
     setEvents([]);
     localStorage.removeItem(STORAGE_KEY);
     clearSavedEventsApi();
+  };
+
+  const runButtonLabel = () => {
+    if (!isRunning) return 'Run Agent';
+    if (runProgress) return `Scanning ${runProgress.done + 1}/${runProgress.total}: ${runProgress.currentCity}…`;
+    return 'Starting…';
   };
 
   if (selectedEvent) {
@@ -126,7 +182,7 @@ const Home = () => {
               disabled={isRunning}
               className={isRunning ? 'opacity-80 cursor-wait' : ''}
             >
-              {isRunning ? 'Scanning Next 7 Days...' : 'Run Agent'}
+              {runButtonLabel()}
             </Button>
           </div>
         </div>
