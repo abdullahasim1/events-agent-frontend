@@ -6,27 +6,23 @@ export const normalizeEvent = (e, idx = 0) => {
   return {
     ...e,
     id,
-    name: e.name || e.title || 'Untitled Event',
     title: e.title || e.name || 'Untitled Event',
     location: e.location || e.city || 'Location TBA',
-    city: e.city || e.location || 'Location TBA',
-    type: e.type || e.category || 'General',
     category: e.category || e.type || 'General',
     organization: e.organization || e.organizer || '',
     opportunityType: e.opportunityType || '',
     audienceType: e.audienceType || '',
     contactInfo: e.contactInfo || e.email || '',
-    registrationDeadline: e.registrationDeadline || '',
-    proposalDeadline: e.proposalDeadline || '',
-    notes: e.notes || e.description || '',
+    registrationDeadline: e.registrationDeadline || '-',
+    proposalDeadline: e.proposalDeadline || '-',
+    description: e.description || e.notes || '',
     status: e.status || 'Upcoming',
     date: e.date || '',
     time: e.time || '',
-    venue: e.venue || (e.city ? `${e.city} Venue` : 'Venue TBA'),
-    link: e.link || e.ticketUrl || '#',
+    venue: e.venue || (e.location ? `${e.location} Venue` : 'Venue TBA'),
     ticketUrl: e.ticketUrl || e.link || '#',
-    description: e.description || '',
     source: e.source || 'Agent Scraper',
+    proximityTier: Number(e.proximityTier) || 99,
   };
 };
 
@@ -61,32 +57,6 @@ export const runDefaultAgent = async ({ startDate = null } = {}) => {
     body: JSON.stringify({
       startDate: startDate || null,
       days: 7,
-    }),
-  });
-
-  const data = await res.json();
-  if (!res.ok || !data.success) throw new Error(data.message || `Agent run failed (${res.status})`);
-
-  const events = (data.events || []).map(normalizeEvent);
-  const seen = new Set();
-  return events.filter((ev) => {
-    const key = `${(ev.title || '').trim().toLowerCase()}|${(ev.date || '').trim()}`;
-    return key && !seen.has(key) && seen.add(key);
-  });
-};
-
-export const searchEventsBatch = async ({ cities = [], types = [], startDate = null, days = 14 } = {}) => {
-  const locations = Array.isArray(cities) ? cities : [cities].filter(Boolean);
-  const eventTypes = Array.isArray(types) ? types : [types].filter(Boolean);
-
-  const res = await fetch(`${API_BASE_URL}/events`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({
-      locations: locations.length ? locations : undefined,
-      eventTypes: eventTypes.length ? eventTypes : undefined,
-      startDate: startDate || null,
-      days: Number(days) || 7,
     }),
   });
 
