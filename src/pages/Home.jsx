@@ -107,25 +107,34 @@ const Home = () => {
     [events],
   );
 
-  // Merge newly found events into state (dedupe by title|date)
-  const mergeEvents = (items) => {
-    setEvents((prev) => {
-      const existingKeys = new Set(
-        prev.map(
+  // Stream events into state one by one with a smooth, comfortable visual pace (not rushed)
+  const streamInEvents = async (items, isNewFlag = false, delayMs = 350) => {
+    if (!items || !items.length) return;
+    for (const item of items) {
+      setEvents((prev) => {
+        const key = `${(item.title || "").trim().toLowerCase()}|${(item.date || "").trim()}`;
+        const exists = prev.some(
           (e) =>
-            `${(e.title || "").trim().toLowerCase()}|${(e.date || "").trim()}`,
-        ),
-      );
-      const toAdd = items
-        .filter((e) => {
-          const k = `${(e.title || "").trim().toLowerCase()}|${(e.date || "").trim()}`;
-          return k && !existingKeys.has(k) && existingKeys.add(k);
-        })
-        .map((e) => ({ ...e, isNew: true })); // Tag as newly added!
-
-      // Prepend to top of table immediately
-      return [...toAdd, ...prev];
-    });
+            `${(e.title || "").trim().toLowerCase()}|${(e.date || "").trim()}` ===
+            key,
+        );
+        if (exists) {
+          return prev.map((e) =>
+            `${(e.title || "").trim().toLowerCase()}|${(e.date || "").trim()}` ===
+            key
+              ? { ...e, ...item, isNew: isNewFlag ? true : e.isNew }
+              : e,
+          );
+        }
+        // If it's a new live event, prepend to top; if remaining DB events, append to bottom
+        return isNewFlag
+          ? [{ ...item, isNew: true }, ...prev]
+          : [...prev, { ...item, isNew: false }];
+      });
+      if (delayMs > 0) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
   };
 
   // Mark event as seen when user views details, immediately removing the NEW badge
@@ -133,22 +142,31 @@ const Home = () => {
     if (!event) return;
     if (event.isNew) {
       setEvents((prev) =>
-        prev.map((e) => (e.id === event.id ? { ...e, isNew: false } : e))
+        prev.map((e) => (e.id === event.id ? { ...e, isNew: false } : e)),
       );
     }
     setSelectedEvent({ ...event, isNew: false });
   };
 
-  // 1-Click Run Agent: Run cities in parallel batches (3 at a time)
-  // As soon as each city finishes, events stream into the UI immediately!
+  // 1-Click Run Agent:
+  // 1. Table clears & loader starts immediately
+  // 2. NEW events from AI stream in FIRST (comfortable pace, 350ms delay)
+  // 3. Remaining DB events stream in AFTERWARDS at the bottom
   const handleRunAgent = async () => {
     if (isRunning) return;
     setIsRunning(true);
-    // Reset any old isNew flags so only fresh events from this run get tagged
-    setEvents((prev) => prev.map((e) => (e.isNew ? { ...e, isNew: false } : e)));
+    setEvents([]); // Table clears immediately -> triggers active table loader!
+    setRunProgress({
+      done: 0,
+      total: 10,
+      currentCity: "Searching cities for new events...",
+    });
+
     const startDate = todayStr();
     const days = 7;
+
     try {
+      // Step 1: Run AI agent across target cities to find NEW events FIRST
       const matrix = await getRunCities();
       const cities = matrix.cities;
       const total = cities.length;
@@ -156,6 +174,10 @@ const Home = () => {
 
       const firstBatchLabel = cities.slice(0, 3).join(", ");
       setRunProgress({ done: 0, total, currentCity: firstBatchLabel });
+
+      // Track newly added event keys so we know what is already on screen
+      const addedKeys = new Set();
+      let streamQueue = Promise.resolve();
 
       // Process 3 cities in parallel at a time (Fast & safe for Vercel)
       const CONCURRENCY = 3;
@@ -166,7 +188,15 @@ const Home = () => {
             try {
               const chunk = await runCityChunk({ city, startDate, days });
               if (chunk.events && chunk.events.length > 0) {
-                mergeEvents(chunk.events); // Instantly prepends to UI top!
+                // Stream NEW events into table FIRST with a smooth, comfortable pace (350ms per item)
+                for (const ev of chunk.events) {
+                  const key = `${(ev.title || "").trim().toLowerCase()}|${(ev.date || "").trim()}`;
+                  addedKeys.add(key);
+                }
+                streamQueue = streamQueue.then(() =>
+                  streamInEvents(chunk.events, true, 350),
+                );
+                await streamQueue;
               }
             } catch (chunkErr) {
               console.warn(`Chunk failed for ${city}:`, chunkErr.message);
@@ -181,6 +211,24 @@ const Home = () => {
           }),
         );
       }
+
+      // Step 2: Now load remaining DB events AFTER the new ones
+      setRunProgress((prev) => ({
+        ...(prev || {}),
+        currentCity: "Loading remaining database events...",
+      }));
+      const dbEvents = await fetchSavedEvents();
+      if (dbEvents && dbEvents.length > 0) {
+        // Filter only those DB events that aren't already shown
+        const remainingDb = dbEvents.filter((e) => {
+          const key = `${(e.title || "").trim().toLowerCase()}|${(e.date || "").trim()}`;
+          return !addedKeys.has(key);
+        });
+        if (remainingDb.length > 0) {
+          // Stream remaining DB events at the bottom with a smooth pace (300ms per item)
+          await streamInEvents(remainingDb, false, 300);
+        }
+      }
     } catch (err) {
       console.warn(
         "Chunked run unavailable, falling back to single run:",
@@ -189,10 +237,9 @@ const Home = () => {
       try {
         const newEvents = await runDefaultAgent({ startDate });
         const items = Array.isArray(newEvents) ? newEvents : [newEvents];
-        mergeEvents(items);
+        await streamInEvents(items, true, 350);
       } catch (fallbackErr) {
         console.error("Agent run failed:", fallbackErr.message);
-        alert(fallbackErr.message || "Failed to run agent.");
       }
     } finally {
       setIsRunning(false);
@@ -264,7 +311,7 @@ const Home = () => {
           <div className="mt-4 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800 animate-pulse">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-              <span className="font-semibold text-[13px]">Live Streaming</span>
+              <span className="font-semibold text-[13px]">Fetching</span>
             </div>
             <div className="flex items-center gap-3">
               {newlyAddedCount > 0 && (
