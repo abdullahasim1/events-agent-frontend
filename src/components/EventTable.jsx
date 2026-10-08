@@ -170,7 +170,12 @@ const EventTable = ({
                             NEW
                           </span>
                         )}
-                        <span className="truncate">{e.title || e.name}</span>
+                        <span
+                          onClick={() => onViewEvent(e)}
+                          className="truncate cursor-pointer hover:text-emerald-800 hover:underline"
+                        >
+                          {e.title || e.name}
+                        </span>
                       </div>
                     </td>
                     <td className="px-2 align-middle whitespace-nowrap">

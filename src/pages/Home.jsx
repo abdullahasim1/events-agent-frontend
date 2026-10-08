@@ -131,6 +131,24 @@ const Home = () => {
     });
   };
 
+  // Mark event as seen when user views details, immediately removing the NEW badge
+  const handleViewEvent = (event) => {
+    if (!event) return;
+    if (event.isNew) {
+      setEvents((prev) => {
+        const updated = prev.map((e) =>
+          e.id === event.id ? { ...e, isNew: false } : e
+        );
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+      setNewlyAddedCount((c) => Math.max(0, c - 1));
+    }
+    setSelectedEvent({ ...event, isNew: false });
+  };
+
   // 1-Click Run Agent: Run cities in parallel batches (3 at a time)
   // As soon as each city finishes, events stream into the UI immediately!
   const handleRunAgent = async () => {
@@ -273,7 +291,7 @@ const Home = () => {
         <EventTable
           events={filteredEvents}
           loading={isRunning}
-          onViewEvent={setSelectedEvent}
+          onViewEvent={handleViewEvent}
           onOpenRunModal={handleRunAgent}
         />
       </div>
