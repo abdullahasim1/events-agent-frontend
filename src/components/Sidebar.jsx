@@ -1,5 +1,3 @@
-import { Camera } from "lucide-react";
-
 const Sidebar = ({ activeTab = "events", onTabChange = () => {} }) => (
   <aside className="w-60 shrink-0 h-[calc(100vh-20px)] sticky top-[10px] my-[10px] ml-[10px] flex flex-col justify-between bg-[#1a1a1a] text-white rounded-[14px] p-3 select-none">
     <div className="flex flex-col gap-5">
@@ -32,7 +30,6 @@ const Sidebar = ({ activeTab = "events", onTabChange = () => {} }) => (
               : "text-zinc-200 hover:bg-white/5"
           }`}
         >
-          <Camera className="w-3.5 h-3.5" />
           <span>Events</span>
         </button>
 
