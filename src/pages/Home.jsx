@@ -149,9 +149,10 @@ const Home = () => {
   };
 
   // 1-Click Run Agent:
-  // 1. Table clears & loader starts immediately
-  // 2. NEW events from AI stream in FIRST (comfortable pace, 350ms delay)
-  // 3. Remaining DB events stream in AFTERWARDS at the bottom
+  // - Starts loader immediately
+  // - DB events stream in steadily so user NEVER waits ("bech bech ma aty rhy")
+  // - Loader keeps running in table & header throughout entire search
+  // - ONLY TRULY NEW events (not previously in DB) get marked with the green NEW badge & increment new count
   const handleRunAgent = async () => {
     if (isRunning) return;
     setIsRunning(true);
@@ -159,44 +160,94 @@ const Home = () => {
     setRunProgress({
       done: 0,
       total: 10,
-      currentCity: "Searching cities for new events...",
+      currentCity: "Initializing agent & loading database...",
     });
 
     const startDate = todayStr();
     const days = 7;
 
     try {
-      // Step 1: Run AI agent across target cities to find NEW events FIRST
+      // 1. Fetch current database events right away
+      const dbFetchPromise = fetchSavedEvents().catch(() => []);
+
+      // 2. Fetch target cities to run
       const matrix = await getRunCities();
-      const cities = matrix.cities;
+      const cities = matrix.cities || [];
       const total = cities.length;
       let completedCount = 0;
 
-      const firstBatchLabel = cities.slice(0, 3).join(", ");
-      setRunProgress({ done: 0, total, currentCity: firstBatchLabel });
+      // Await DB events (usually takes < 150ms)
+      const allDbEvents = (await dbFetchPromise) || [];
 
-      // Track newly added event keys so we know what is already on screen
-      const addedKeys = new Set();
+      // Create a lookup Set of existing DB keys to detect TRULY new events
+      const existingDbKeys = new Set(
+        allDbEvents.map(
+          (e) =>
+            `${(e.title || "").trim().toLowerCase()}|${(e.date || "").trim()}`,
+        ),
+      );
+
+      // Divide DB events across city batches so they keep coming in smoothly ("bech bech ma aty rhy")
+      const CONCURRENCY = 3;
+      const totalBatches = Math.max(1, Math.ceil(cities.length / CONCURRENCY));
+      const dbChunkSize = Math.ceil(allDbEvents.length / totalBatches);
+
+      let dbIndex = 0;
       let streamQueue = Promise.resolve();
 
-      // Process 3 cities in parallel at a time (Fast & safe for Vercel)
-      const CONCURRENCY = 3;
+      const enqueueStream = (items, isNew, delay) => {
+        streamQueue = streamQueue.then(() =>
+          streamInEvents(items, isNew, delay),
+        );
+        return streamQueue;
+      };
+
       for (let i = 0; i < cities.length; i += CONCURRENCY) {
         const batch = cities.slice(i, i + CONCURRENCY);
+        const batchLabel = batch.join(", ");
+
+        setRunProgress((prev) => ({
+          ...(prev || {}),
+          done: completedCount,
+          total,
+          currentCity: batchLabel,
+        }));
+
+        // Stream a batch of DB events immediately so user sees events without waiting
+        if (dbIndex < allDbEvents.length) {
+          const dbSlice = allDbEvents.slice(dbIndex, dbIndex + dbChunkSize);
+          dbIndex += dbChunkSize;
+          enqueueStream(dbSlice, false, 180);
+        }
+
+        // Run this city batch with the AI agent concurrently
         await Promise.all(
           batch.map(async (city) => {
             try {
               const chunk = await runCityChunk({ city, startDate, days });
               if (chunk.events && chunk.events.length > 0) {
-                // Stream NEW events into table FIRST with a smooth, comfortable pace (350ms per item)
+                // Separate truly new events vs already-existing DB events
+                const trulyNew = [];
+                const alreadyKnown = [];
+
                 for (const ev of chunk.events) {
                   const key = `${(ev.title || "").trim().toLowerCase()}|${(ev.date || "").trim()}`;
-                  addedKeys.add(key);
+                  if (!existingDbKeys.has(key)) {
+                    existingDbKeys.add(key); // Mark as known so we don't duplicate
+                    trulyNew.push(ev);
+                  } else {
+                    alreadyKnown.push(ev);
+                  }
                 }
-                streamQueue = streamQueue.then(() =>
-                  streamInEvents(chunk.events, true, 350),
-                );
-                await streamQueue;
+
+                // If brand new events discovered, stream to TOP with NEW badge!
+                if (trulyNew.length > 0) {
+                  enqueueStream(trulyNew, true, 300);
+                }
+                // If existing event confirmed, update in place without fake NEW badge
+                if (alreadyKnown.length > 0) {
+                  enqueueStream(alreadyKnown, false, 50);
+                }
               }
             } catch (chunkErr) {
               console.warn(`Chunk failed for ${city}:`, chunkErr.message);
@@ -212,23 +263,14 @@ const Home = () => {
         );
       }
 
-      // Step 2: Now load remaining DB events AFTER the new ones
-      setRunProgress((prev) => ({
-        ...(prev || {}),
-        currentCity: "Loading remaining database events...",
-      }));
-      const dbEvents = await fetchSavedEvents();
-      if (dbEvents && dbEvents.length > 0) {
-        // Filter only those DB events that aren't already shown
-        const remainingDb = dbEvents.filter((e) => {
-          const key = `${(e.title || "").trim().toLowerCase()}|${(e.date || "").trim()}`;
-          return !addedKeys.has(key);
-        });
-        if (remainingDb.length > 0) {
-          // Stream remaining DB events at the bottom with a smooth pace (300ms per item)
-          await streamInEvents(remainingDb, false, 300);
-        }
+      // If any DB events remain, stream them at the bottom
+      if (dbIndex < allDbEvents.length) {
+        const remainingDb = allDbEvents.slice(dbIndex);
+        enqueueStream(remainingDb, false, 180);
       }
+
+      // Wait until all event streaming animations finish
+      await streamQueue;
     } catch (err) {
       console.warn(
         "Chunked run unavailable, falling back to single run:",
@@ -237,7 +279,7 @@ const Home = () => {
       try {
         const newEvents = await runDefaultAgent({ startDate });
         const items = Array.isArray(newEvents) ? newEvents : [newEvents];
-        await streamInEvents(items, true, 350);
+        await streamInEvents(items, true, 300);
       } catch (fallbackErr) {
         console.error("Agent run failed:", fallbackErr.message);
       }
