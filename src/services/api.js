@@ -36,7 +36,9 @@ export const fetchSavedEvents = async () => {
     if (!res.ok) return null;
     const data = await res.json();
     if (data.success && Array.isArray(data.events)) {
-      return data.events.map(normalizeEvent);
+      const events = data.events.map(normalizeEvent);
+      events.lastFetchedAt = data.lastFetchedAt || null;
+      return events;
     }
   } catch (err) {
     console.warn("Could not fetch saved events from server:", err.message);
@@ -120,4 +122,75 @@ export const runCityChunk = async ({
       return key && !seen.has(key) && seen.add(key);
     }),
   };
+};
+
+// Run the agent for a single city chunk using REAL-TIME Server-Sent Events (SSE).
+// Emits each event via onEvent as soon as Claude outputs it.
+export const runCityChunkStream = async ({
+  city,
+  startDate = null,
+  days = 7,
+  onEvent = () => {},
+  onStatus = () => {},
+} = {}) => {
+  const url = `${API_BASE_URL}/events/stream`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    },
+    body: JSON.stringify({
+      city,
+      startDate: startDate || null,
+      days,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Chunk stream failed (${res.status})`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const messages = buffer.split("\n\n");
+    buffer = messages.pop() || "";
+
+    for (const msg of messages) {
+      if (!msg.trim()) continue;
+      const lines = msg.split("\n");
+      let eventType = "message";
+      let dataStr = "";
+
+      for (const line of lines) {
+        if (line.startsWith("event:")) {
+          eventType = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+          dataStr = line.slice(5).trim();
+        }
+      }
+
+      if (dataStr) {
+        try {
+          const parsed = JSON.parse(dataStr);
+          if (eventType === "event") {
+            onEvent(normalizeEvent(parsed));
+          } else if (eventType === "status") {
+            onStatus(parsed);
+          } else if (eventType === "error") {
+            console.warn(`[Stream ${city}] Error:`, parsed.message);
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
+  return { success: true, city };
 };

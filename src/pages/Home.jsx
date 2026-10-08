@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Sparkles, Trash2, Loader2 } from "lucide-react";
+import { Sparkles, Loader2, Clock } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import EventTable from "../components/EventTable";
 import EventDetail from "./EventDetail";
@@ -9,10 +9,116 @@ import {
   runDefaultAgent,
   getRunCities,
   runCityChunk,
+  runCityChunkStream,
 } from "../services/api";
 
 // Today's date in YYYY-MM-DD (used as the default run start date)
 const todayStr = () => new Date().toISOString().slice(0, 10);
+
+// Normalizes title: strips promotional noise, years, states, and punctuation
+const getTitleFingerprint = (title = "") => {
+  return String(title || "")
+    .toLowerCase()
+    .replace(/^(join us at|register (now )?for|welcome to|announcing)\s+/i, "")
+    .replace(/\b(202[4-9]|203[0-9])\b/g, "") // remove 2025, 2026, 2027
+    .replace(
+      /\b(national|state|statewide|annual|biannual|biennial|the|1st|2nd|3rd|4th|5th|fall|spring|summer|winter|mn|minnesota)\b/g,
+      "",
+    )
+    .replace(/[^a-z0-9]/g, "") // remove punctuation & whitespace
+    .trim();
+};
+
+// Canonical date: converts any date string into canonical YYYY-MM-DD
+const normalizeDateKey = (dateStr = "") => {
+  if (!dateStr) return "";
+  const match = String(dateStr).match(/\d{4}-\d{2}-\d{2}/);
+  if (match) return match[0];
+  const parsed = new Date(dateStr);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return String(dateStr).toLowerCase().replace(/[^a-z0-9]/g, "");
+};
+
+// Unique canonical event key
+const getEventKey = (event = {}) => {
+  const fp = getTitleFingerprint(event.title || event.name);
+  const date = normalizeDateKey(event.date);
+  return `${fp}|${date}`;
+};
+
+// Checks whether two events refer to the same real-world conference
+const isSameEvent = (a, b) => {
+  if (!a || !b) return false;
+  const keyA = getEventKey(a);
+  const keyB = getEventKey(b);
+  if (keyA && keyB && keyA === keyB) return true;
+
+  const dateA = normalizeDateKey(a.date);
+  const dateB = normalizeDateKey(b.date);
+  if (dateA && dateB && dateA !== dateB) return false;
+
+  const fpA = getTitleFingerprint(a.title || a.name);
+  const fpB = getTitleFingerprint(b.title || b.name);
+  if (fpA && fpB) {
+    if (fpA === fpB) return true;
+    if (fpA.includes(fpB) || fpB.includes(fpA)) {
+      const minLen = Math.min(fpA.length, fpB.length);
+      const maxLen = Math.max(fpA.length, fpB.length);
+      if (minLen / maxLen >= 0.6) return true;
+    }
+  }
+
+  const urlA = String(a.ticketUrl || "").toLowerCase().split("?")[0].replace(/\/$/, "");
+  const urlB = String(b.ticketUrl || "").toLowerCase().split("?")[0].replace(/\/$/, "");
+  if (
+    urlA &&
+    urlB &&
+    !urlA.includes("google.com") &&
+    !urlA.includes("eventbrite.com/d/") &&
+    urlA === urlB
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
+// Formats "Last fetched" timestamp with user-friendly clock time and relative duration
+const formatLastFetched = (dateVal) => {
+  if (!dateVal) return "Never";
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return "Unknown";
+
+  const diffSec = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
+  const timeStr = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
+  const isToday = d.toDateString() === new Date().toDateString();
+
+  let relative = "";
+  if (diffSec < 60) {
+    relative = "just now";
+  } else if (diffSec < 3600) {
+    const mins = Math.floor(diffSec / 60);
+    relative = `${mins}m ago`;
+  } else if (diffSec < 86400) {
+    const hours = Math.floor(diffSec / 3600);
+    relative = `${hours}h ago`;
+  }
+
+  if (isToday) {
+    return relative ? `Today at ${timeStr} (${relative})` : `Today at ${timeStr}`;
+  }
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) {
+    return `Yesterday at ${timeStr}`;
+  }
+
+  const dateStr = d.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+  return `${dateStr} at ${timeStr}`;
+};
 
 const Home = () => {
   const [events, setEvents] = useState([]);
@@ -24,8 +130,22 @@ const Home = () => {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
   const [runProgress, setRunProgress] = useState(null); // { done, total, currentCity }
+  const [lastFetchedAt, setLastFetchedAt] = useState(() => {
+    try {
+      return localStorage.getItem("events_last_fetched_at") || null;
+    } catch (_) {
+      return null;
+    }
+  });
 
-  // Load saved events from Database on mount (Single Source of Truth)
+  // Ticker to refresh relative time ("just now", "2m ago") every 30 seconds
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Load saved events from Database on mount (Deduplicated Single Source of Truth)
   useEffect(() => {
     let isMounted = true;
     setIsInitialLoading(true);
@@ -33,7 +153,29 @@ const Home = () => {
       .then((dbEvents) => {
         if (!isMounted) return;
         if (dbEvents && Array.isArray(dbEvents)) {
-          setEvents(dbEvents);
+          // Collapse any duplicate variants into one canonical item
+          const clean = [];
+          for (const ev of dbEvents) {
+            const exists = clean.some((existing) => isSameEvent(existing, ev));
+            if (!exists) {
+              clean.push(ev);
+            }
+          }
+          setEvents(clean);
+
+          // Extract latest update timestamp from DB events
+          let latest = null;
+          for (const ev of dbEvents) {
+            const t = ev.updatedAt || ev.createdAt;
+            if (t && (!latest || new Date(t) > new Date(latest))) {
+              latest = t;
+            }
+          }
+          const finalTimestamp = dbEvents.lastFetchedAt || latest || new Date().toISOString();
+          setLastFetchedAt(finalTimestamp);
+          try {
+            localStorage.setItem("events_last_fetched_at", finalTimestamp);
+          } catch (_) {}
         }
       })
       .catch((err) => {
@@ -112,21 +254,27 @@ const Home = () => {
     if (!items || !items.length) return;
     for (const item of items) {
       setEvents((prev) => {
-        const key = `${(item.title || "").trim().toLowerCase()}|${(item.date || "").trim()}`;
-        const exists = prev.some(
-          (e) =>
-            `${(e.title || "").trim().toLowerCase()}|${(e.date || "").trim()}` ===
-            key,
-        );
-        if (exists) {
-          return prev.map((e) =>
-            `${(e.title || "").trim().toLowerCase()}|${(e.date || "").trim()}` ===
-            key
-              ? { ...e, ...item, isNew: isNewFlag ? true : e.isNew }
-              : e,
-          );
+        const existingIndex = prev.findIndex((e) => isSameEvent(e, item));
+        if (existingIndex !== -1) {
+          return prev.map((e, idx) => {
+            if (idx === existingIndex) {
+              const longerTitle =
+                (item.title || "").length > (e.title || "").length &&
+                !String(item.title || "").toLowerCase().startsWith("join us")
+                  ? item.title
+                  : e.title;
+              return {
+                ...e,
+                ...item,
+                title: longerTitle,
+                // Preserve isNew if already marked new, but DO NOT flip existing DB event to new
+                isNew: Boolean(e.isNew || (isNewFlag && !e.id)),
+              };
+            }
+            return e;
+          });
         }
-        // If it's a new live event, prepend to top; if remaining DB events, append to bottom
+        // If it's a new live event, prepend to top; if DB event, append to bottom
         return isNewFlag
           ? [{ ...item, isNew: true }, ...prev]
           : [...prev, { ...item, isNew: false }];
@@ -152,7 +300,7 @@ const Home = () => {
   // - Starts loader immediately
   // - DB events stream in steadily so user NEVER waits ("bech bech ma aty rhy")
   // - Loader keeps running in table & header throughout entire search
-  // - ONLY TRULY NEW events (not previously in DB) get marked with the green NEW badge & increment new count
+  // - ONLY TRULY NEW events (not previously in DB or in earlier chunks) get marked with the green NEW badge
   const handleRunAgent = async () => {
     if (isRunning) return;
     setIsRunning(true);
@@ -177,15 +325,32 @@ const Home = () => {
       let completedCount = 0;
 
       // Await DB events (usually takes < 150ms)
-      const allDbEvents = (await dbFetchPromise) || [];
+      const rawDbEvents = (await dbFetchPromise) || [];
+      // Deduplicate DB events
+      const allDbEvents = [];
+      for (const ev of rawDbEvents) {
+        if (!allDbEvents.some((existing) => isSameEvent(existing, ev))) {
+          allDbEvents.push(ev);
+        }
+      }
 
-      // Create a lookup Set of existing DB keys to detect TRULY new events
-      const existingDbKeys = new Set(
-        allDbEvents.map(
-          (e) =>
-            `${(e.title || "").trim().toLowerCase()}|${(e.date || "").trim()}`,
-        ),
+      // Track known events across chunks and DB so duplicates NEVER get marked as new
+      const knownKeys = new Set(
+        allDbEvents.map((e) => getEventKey(e)).filter(Boolean),
       );
+      const knownEvents = [...allDbEvents];
+
+      const checkIfKnown = (ev) => {
+        const k = getEventKey(ev);
+        if (k && knownKeys.has(k)) return true;
+        return knownEvents.some((existing) => isSameEvent(existing, ev));
+      };
+
+      const markAsKnown = (ev) => {
+        const k = getEventKey(ev);
+        if (k) knownKeys.add(k);
+        knownEvents.push(ev);
+      };
 
       // Divide DB events across city batches so they keep coming in smoothly ("bech bech ma aty rhy")
       const CONCURRENCY = 3;
@@ -220,37 +385,44 @@ const Home = () => {
           enqueueStream(dbSlice, false, 180);
         }
 
-        // Run this city batch with the AI agent concurrently
+        // Run this city batch with the AI agent using REAL-TIME Claude SSE streaming
         await Promise.all(
           batch.map(async (city) => {
             try {
-              const chunk = await runCityChunk({ city, startDate, days });
-              if (chunk.events && chunk.events.length > 0) {
-                // Separate truly new events vs already-existing DB events
-                const trulyNew = [];
-                const alreadyKnown = [];
-
-                for (const ev of chunk.events) {
-                  const key = `${(ev.title || "").trim().toLowerCase()}|${(ev.date || "").trim()}`;
-                  if (!existingDbKeys.has(key)) {
-                    existingDbKeys.add(key); // Mark as known so we don't duplicate
-                    trulyNew.push(ev);
-                  } else {
-                    alreadyKnown.push(ev);
+              await runCityChunkStream({
+                city,
+                startDate,
+                days,
+                onStatus: (st) => {
+                  setRunProgress((prev) => ({
+                    ...(prev || {}),
+                    currentCity: `${city} • ${st.message || "Searching..."}`,
+                  }));
+                },
+                onEvent: (ev) => {
+                  // As soon as Claude outputs each event, it fires here in real time!
+                  const alreadyKnown = checkIfKnown(ev);
+                  markAsKnown(ev);
+                  // Only mark isNew if it wasn't already in the DB or already found in an earlier chunk!
+                  enqueueStream([ev], !alreadyKnown, 180);
+                },
+              });
+            } catch (chunkErr) {
+              console.warn(
+                `Chunk stream failed for ${city}:`,
+                chunkErr.message,
+              );
+              // Fallback to regular chunk if stream fails
+              try {
+                const chunk = await runCityChunk({ city, startDate, days });
+                if (chunk.events && chunk.events.length > 0) {
+                  for (const ev of chunk.events) {
+                    const alreadyKnown = checkIfKnown(ev);
+                    markAsKnown(ev);
+                    enqueueStream([ev], !alreadyKnown, 180);
                   }
                 }
-
-                // If brand new events discovered, stream to TOP with NEW badge!
-                if (trulyNew.length > 0) {
-                  enqueueStream(trulyNew, true, 300);
-                }
-                // If existing event confirmed, update in place without fake NEW badge
-                if (alreadyKnown.length > 0) {
-                  enqueueStream(alreadyKnown, false, 50);
-                }
-              }
-            } catch (chunkErr) {
-              console.warn(`Chunk failed for ${city}:`, chunkErr.message);
+              } catch (_) {}
             } finally {
               completedCount++;
               setRunProgress({
@@ -286,6 +458,11 @@ const Home = () => {
     } finally {
       setIsRunning(false);
       setRunProgress(null);
+      const nowIso = new Date().toISOString();
+      setLastFetchedAt(nowIso);
+      try {
+        localStorage.setItem("events_last_fetched_at", nowIso);
+      } catch (_) {}
     }
   };
 
@@ -315,15 +492,27 @@ const Home = () => {
           </h1>
         </div>
 
-        <div className="mt-[26px] flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center flex-wrap gap-y-2">
-            <SearchInput
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onEnter={handleRunAgent}
-              placeholder="Search by events..."
-              containerClassName="w-[330px] h-[42px] mr-[10px]"
-            />
+        <div className="mt-[26px] flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex items-start flex-wrap gap-y-2">
+            <div className="flex flex-col mr-[10px]">
+              <SearchInput
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onEnter={handleRunAgent}
+                placeholder="Search by events..."
+                containerClassName="w-[330px] h-[42px]"
+              />
+              <div className="mt-1.5 pl-1 flex items-center gap-1.5 text-[12px] text-[#6b7280]">
+                <Clock className="w-3.5 h-3.5 text-[#9ca3af] shrink-0" />
+                <span>
+                  Last fetched:{" "}
+                  <span className="font-medium text-[#111827]">
+                    {formatLastFetched(lastFetchedAt)}
+                  </span>
+                </span>
+              </div>
+            </div>
+
             <Select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
