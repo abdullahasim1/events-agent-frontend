@@ -355,16 +355,6 @@ const Home = () => {
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
               <span className="font-semibold text-[13px]">Fetching</span>
             </div>
-            <div className="flex items-center gap-3">
-              {newlyAddedCount > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 font-bold text-[11px] animate-bounce">
-                  +{newlyAddedCount} New Added!
-                </span>
-              )}
-              <span className="font-medium text-emerald-700">
-                {events.length} total events
-              </span>
-            </div>
           </div>
         )}
 
