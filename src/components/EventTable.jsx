@@ -6,9 +6,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsRight,
-  Sparkles,
 } from "lucide-react";
-import { Select, Button } from "./common";
+import { Select } from "./common";
 
 const formatDate = (val) => {
   if (!val || val === "TBA") return "TBA";
@@ -23,10 +22,10 @@ const formatDate = (val) => {
 };
 
 const COLS = [
-  { key: "title", label: "Event Name", width: "28.5%", sortable: true },
-  { key: "date", label: "Date", width: "28.5%", sortable: true },
-  { key: "location", label: "Location", width: "28.5%", sortable: true },
-  { key: "actions", label: "Actions", width: "11.5%", sortable: false },
+  { key: "title", label: "Event Name", width: "38%", sortable: true },
+  { key: "date", label: "Date", width: "22%", sortable: true },
+  { key: "location", label: "Location", width: "28%", sortable: true },
+  { key: "actions", label: "Actions", width: "12%", sortable: false },
 ];
 
 const EventTable = ({
@@ -35,17 +34,10 @@ const EventTable = ({
   onViewEvent = () => {},
   onOpenRunModal = () => {},
 }) => {
-  const [selected, setSelected] = useState([]);
   const [sort, setSort] = useState({ field: "latest", asc: false });
   const [perPage, setPerPage] = useState(50);
   const [page, setPage] = useState(1);
 
-  const toggleAll = (e) =>
-    setSelected(e.target.checked ? events.map((ev) => ev.id) : []);
-  const toggleOne = (id) =>
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
-    );
   const handleSort = (field) =>
     setSort((s) => ({ field, asc: s.field === field ? !s.asc : true }));
 
@@ -55,7 +47,8 @@ const EventTable = ({
       if (a.isNew && !b.isNew) return -1;
       if (!a.isNew && b.isNew) return 1;
       // Proximity Tier Secondary (Near first)
-      const tierDiff = (Number(a.proximityTier) || 99) - (Number(b.proximityTier) || 99);
+      const tierDiff =
+        (Number(a.proximityTier) || 99) - (Number(b.proximityTier) || 99);
       if (tierDiff !== 0) return tierDiff;
       return String(a.date || "").localeCompare(String(b.date || ""));
     }
@@ -85,28 +78,19 @@ const EventTable = ({
         <div className="overflow-x-auto">
           <table className="w-full table-fixed text-left min-w-[860px]">
             <colgroup>
-              <col style={{ width: "3%" }} />
               {COLS.map((c, i) => (
                 <col key={i} style={{ width: c.width }} />
               ))}
             </colgroup>
             <thead>
               <tr className="h-[44px] bg-[rgba(227,227,227,0.67)] text-[13px] text-[#080808]">
-                <th className="px-[15px] align-middle">
-                  <input
-                    type="checkbox"
-                    checked={total > 0 && selected.length === total}
-                    onChange={toggleAll}
-                    className="w-[13px] h-[13px] rounded-[3px] bg-[#919191] checked:bg-[#86af96] cursor-pointer"
-                  />
-                </th>
-                {COLS.map((col) => (
+                {COLS.map((col, idx) => (
                   <th
                     key={col.key}
                     onClick={
                       col.sortable ? () => handleSort(col.key) : undefined
                     }
-                    className={`px-2 font-normal align-middle ${col.sortable ? "cursor-pointer hover:opacity-70" : ""}`}
+                    className={`px-2 font-normal align-middle ${idx === 0 ? "pl-5" : ""} ${col.sortable ? "cursor-pointer hover:opacity-70" : ""}`}
                   >
                     <div className="flex items-center gap-2">
                       <span>{col.label}</span>
@@ -121,27 +105,21 @@ const EventTable = ({
             <tbody className="text-[13px] text-[#444343]">
               {loading && pagedEvents.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-16 text-center text-zinc-500">
-                    <div className="flex flex-col items-center justify-center gap-2.5">
-                      <div className="w-5 h-5 border-2 border-[#82aa92] border-t-transparent rounded-full animate-spin" />
-                      <span>Finding events...</span>
+                  <td colSpan={4} className="py-20 text-center text-zinc-500">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <div className="w-7 h-7 border-[2.5px] border-[#82aa92] border-t-transparent rounded-full animate-spin" />
+                      <span className="text-[13px] font-medium text-[#444343]">
+                        Loading events...
+                      </span>
                     </div>
                   </td>
                 </tr>
               ) : pagedEvents.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-16 text-center text-zinc-500">
+                  <td colSpan={4} className="py-16 text-center text-zinc-500">
                     <p className="font-medium text-[#1a1a1a]">
                       No events found
                     </p>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      icon={Sparkles}
-                      onClick={onOpenRunModal}
-                    >
-                      Run Agent Now
-                    </Button>
                   </td>
                 </tr>
               ) : (
@@ -149,19 +127,13 @@ const EventTable = ({
                   <tr
                     key={e.id}
                     className={`h-[50px] border-b border-[#ececec] transition-colors ${
-                      e.isNew ? "bg-emerald-50/60 hover:bg-emerald-50" : "hover:bg-[#fafafa]"
+                      e.isNew
+                        ? "bg-emerald-50/60 hover:bg-emerald-50"
+                        : "hover:bg-[#fafafa]"
                     }`}
                   >
-                    <td className="px-[15px] align-middle">
-                      <input
-                        type="checkbox"
-                        checked={selected.includes(e.id)}
-                        onChange={() => toggleOne(e.id)}
-                        className="w-[13px] h-[13px] rounded-[3px] bg-[#d4d4d4] checked:bg-[#86af96] cursor-pointer"
-                      />
-                    </td>
                     <td
-                      className="px-2 align-middle truncate font-medium text-zinc-900"
+                      className="pl-5 pr-2 align-middle truncate font-medium text-zinc-900"
                       title={e.title || e.name}
                     >
                       <div className="flex items-center gap-2">

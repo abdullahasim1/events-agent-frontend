@@ -11,22 +11,12 @@ import {
   runCityChunk,
 } from "../services/api";
 
-const STORAGE_KEY = "eventscout_api_events";
-
-const getSavedEvents = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) || [] : [];
-  } catch {
-    return [];
-  }
-};
-
 // Today's date in YYYY-MM-DD (used as the default run start date)
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
 const Home = () => {
-  const [events, setEvents] = useState(getSavedEvents);
+  const [events, setEvents] = useState([]);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
   const [typeFilter, setTypeFilter] = useState("All Types");
@@ -35,16 +25,27 @@ const Home = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [runProgress, setRunProgress] = useState(null); // { done, total, currentCity }
 
-  // Load saved events from PostgreSQL Database on mount
+  // Load saved events from Database on mount (Single Source of Truth)
   useEffect(() => {
-    fetchSavedEvents().then((dbEvents) => {
-      if (dbEvents && dbEvents.length > 0) {
-        setEvents(dbEvents);
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(dbEvents));
-        } catch {}
-      }
-    });
+    let isMounted = true;
+    setIsInitialLoading(true);
+    fetchSavedEvents()
+      .then((dbEvents) => {
+        if (!isMounted) return;
+        if (dbEvents && Array.isArray(dbEvents)) {
+          setEvents(dbEvents);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not fetch events from DB:", err);
+      })
+      .finally(() => {
+        if (isMounted) setIsInitialLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Warn before closing the tab mid-run (a full run takes minutes)
@@ -106,7 +107,7 @@ const Home = () => {
     [events],
   );
 
-  // Merge newly found events into state (dedupe by title|date), persist to localStorage
+  // Merge newly found events into state (dedupe by title|date)
   const mergeEvents = (items) => {
     setEvents((prev) => {
       const existingKeys = new Set(
@@ -123,11 +124,7 @@ const Home = () => {
         .map((e) => ({ ...e, isNew: true })); // Tag as newly added!
 
       // Prepend to top of table immediately
-      const updated = [...toAdd, ...prev];
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      } catch {}
-      return updated;
+      return [...toAdd, ...prev];
     });
   };
 
@@ -135,15 +132,9 @@ const Home = () => {
   const handleViewEvent = (event) => {
     if (!event) return;
     if (event.isNew) {
-      setEvents((prev) => {
-        const updated = prev.map((e) =>
-          e.id === event.id ? { ...e, isNew: false } : e
-        );
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-        } catch {}
-        return updated;
-      });
+      setEvents((prev) =>
+        prev.map((e) => (e.id === event.id ? { ...e, isNew: false } : e))
+      );
     }
     setSelectedEvent({ ...event, isNew: false });
   };
@@ -290,7 +281,7 @@ const Home = () => {
 
         <EventTable
           events={filteredEvents}
-          loading={isRunning}
+          loading={isInitialLoading || isRunning}
           onViewEvent={handleViewEvent}
           onOpenRunModal={handleRunAgent}
         />

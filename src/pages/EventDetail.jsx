@@ -4,7 +4,6 @@ import { ChevronLeft, ExternalLink } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 
-const STORAGE_KEY = "eventscout_api_events";
 const MONTHS = [
   "January",
   "February",
@@ -59,23 +58,12 @@ const EventDetail = ({ event: propEvent, onBack: propOnBack }) => {
   const location = useLocation();
   const { id } = useParams();
 
-  // Find event from props, router state, or localStorage
+  // Find event from props or router state
   const event = useMemo(() => {
     if (propEvent) return propEvent;
     if (location.state?.event) return location.state.event;
-    if (id) {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw)
-          return (
-            JSON.parse(raw).find((e) => String(e.id) === String(id)) || null
-          );
-      } catch {
-        return null;
-      }
-    }
     return null;
-  }, [propEvent, location.state, id]);
+  }, [propEvent, location.state]);
 
   const handleBack = () => (propOnBack ? propOnBack() : navigate("/"));
 
