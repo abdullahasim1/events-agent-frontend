@@ -100,7 +100,11 @@ const Home = () => {
     [events],
   );
 
-  const [newlyAddedCount, setNewlyAddedCount] = useState(0);
+  // Always strictly equal to the number of events currently marked with isNew in the table
+  const newlyAddedCount = useMemo(
+    () => events.filter((e) => Boolean(e.isNew)).length,
+    [events],
+  );
 
   // Merge newly found events into state (dedupe by title|date), persist to localStorage
   const mergeEvents = (items) => {
@@ -117,10 +121,6 @@ const Home = () => {
           return k && !existingKeys.has(k) && existingKeys.add(k);
         })
         .map((e) => ({ ...e, isNew: true })); // Tag as newly added!
-
-      if (toAdd.length > 0) {
-        setNewlyAddedCount((c) => c + toAdd.length);
-      }
 
       // Prepend to top of table immediately
       const updated = [...toAdd, ...prev];
@@ -144,7 +144,6 @@ const Home = () => {
         } catch {}
         return updated;
       });
-      setNewlyAddedCount((c) => Math.max(0, c - 1));
     }
     setSelectedEvent({ ...event, isNew: false });
   };
@@ -154,7 +153,8 @@ const Home = () => {
   const handleRunAgent = async () => {
     if (isRunning) return;
     setIsRunning(true);
-    setNewlyAddedCount(0);
+    // Reset any old isNew flags so only fresh events from this run get tagged
+    setEvents((prev) => prev.map((e) => (e.isNew ? { ...e, isNew: false } : e)));
     const startDate = todayStr();
     const days = 7;
     try {
