@@ -1,8 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ChevronLeft, ChevronRight, ExternalLink, ChevronDown, ChevronUp, Pencil, Calendar, Check } from "lucide-react";
+import { ChevronLeft, ExternalLink, ChevronDown, Calendar, Check } from "lucide-react";
 import Sidebar from "../components/Sidebar";
-import Header from "../components/Header";
 import { updateEventApi } from "../services/api";
 
 const MONTHS = [
@@ -19,7 +18,18 @@ const formatLongDate = (dateStr) => {
     : dateStr;
 };
 
-// Reusable card & field helpers
+// 🏷️ Saved Indicator Badge
+const SavedBadge = ({ show }) => {
+  if (!show) return null;
+  return (
+    <span className="text-[10px] font-semibold text-[#2d563c] bg-[#eef6f0] px-1.5 py-0.5 rounded inline-flex items-center gap-1 select-none shadow-[0_1px_2px_rgba(0,0,0,0.04)] animate-in fade-in">
+      <Check className="w-2.5 h-2.5 text-[#2d563c]" strokeWidth={2.5} />
+      Saved
+    </span>
+  );
+};
+
+// 📦 Reusable card
 const DetailCard = ({ title, children }) => (
   <div className="w-full bg-white rounded-[14px] p-6 shadow-[0_0_2.5px_rgba(0,0,0,0.08),inset_0_0_0_1px_rgba(8,8,8,0.04)]">
     <h2 className="text-[13.5px] font-bold text-[#080808] mb-5 tracking-tight">
@@ -31,179 +41,114 @@ const DetailCard = ({ title, children }) => (
   </div>
 );
 
-const InfoField = ({ label, value, className = "", children }) => (
-  <div className={className}>
-    <p className="text-[11px] font-normal text-[rgba(68,67,67,0.78)] mb-1">
-      {label}
-    </p>
+// 🏷️ Info Field Wrapper
+const InfoField = ({ label, value, showSaved, className = "", children }) => (
+  <div className={`flex flex-col ${className}`}>
+    <div className="flex items-center justify-between mb-1.5 min-h-[16px]">
+      <span className="text-[11px] font-normal text-[rgba(68,67,67,0.78)]">
+        {label}
+      </span>
+      {showSaved && <SavedBadge show={true} />}
+    </div>
     {children || (
-      <p className="text-[12.5px] font-semibold text-[#080808] leading-snug">
+      <p className="text-[12.5px] font-bold text-[#080808] leading-snug break-words">
         {value || "-"}
       </p>
     )}
   </div>
 );
 
-// 🏷️ Reusable Save Status Badge
-const SavedBadge = ({ status }) => {
-  if (!status) return null;
-  if (status === "saving") {
-    return (
-      <span className="text-[11px] text-zinc-400 font-medium animate-pulse select-none shrink-0">
-        Saving...
-      </span>
-    );
-  }
-  if (status === "saved") {
-    return (
-      <span className="text-[11px] font-semibold text-[#2d563c] bg-[#eef6f0] px-1.5 py-0.5 rounded inline-flex items-center gap-1 select-none transition-all shadow-[0_1px_2px_rgba(0,0,0,0.04)] shrink-0">
-        <Check className="w-3 h-3 text-[#2d563c]" strokeWidth={2.5} />
-        Saved
-      </span>
-    );
-  }
-  return null;
-};
-
-// ✏️ Inline Editable Text Component with icon
-const EditableText = ({ value, onSave, icon: Icon = Pencil, placeholder = "-" }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [draft, setDraft] = useState(value === "-" ? "" : value);
-  const [saveStatus, setSaveStatus] = useState(null);
-  const timerRef = useRef(null);
+// ✏️ Input Box (Tick icon appears ONLY when value is changed or cleared)
+const InputBox = ({ value, onChange, placeholder = "-" }) => {
+  const initialText = value === "-" ? "" : (value || "");
+  const [val, setVal] = useState(initialText);
+  const [justSaved, setJustSaved] = useState(false);
 
   useEffect(() => {
-    setDraft(value === "-" ? "" : value);
+    setVal(value === "-" ? "" : (value || ""));
   }, [value]);
 
-  const handleCommit = async () => {
-    setIsEditing(false);
-    const finalVal = draft.trim() || "-";
-    if (finalVal !== value) {
-      setSaveStatus("saving");
-      try {
-        await onSave(finalVal);
-        setSaveStatus("saved");
-        clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => setSaveStatus(null), 2200);
-      } catch {
-        setSaveStatus(null);
-      }
-    }
+  const isDirty = val !== initialText;
+
+  const handleSave = () => {
+    const trimmed = val.trim();
+    const finalVal = trimmed === "" ? "-" : trimmed;
+    onChange(finalVal);
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 2000);
   };
 
-  if (isEditing) {
-    return (
-      <div className="flex items-center gap-1.5 w-full">
-        <input
-          type="text"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleCommit();
-            if (e.key === "Escape") {
-              setDraft(value === "-" ? "" : value);
-              setIsEditing(false);
-            }
-          }}
-          onBlur={handleCommit}
-          autoFocus
-          className="text-[12.5px] font-semibold text-[#080808] border border-[#558066] rounded px-2 py-0.5 outline-none w-full bg-white shadow-sm focus:ring-1 focus:ring-[#558066]"
-        />
+  return (
+    <div className="relative w-full flex items-center">
+      <input
+        type="text"
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            handleSave();
+            e.currentTarget.blur();
+          }
+        }}
+        placeholder={placeholder}
+        className={`w-full bg-white border rounded-[8px] pl-3.5 pr-8 py-2 text-[12.5px] font-medium text-[#080808] placeholder:text-gray-400 focus:outline-none transition-all shadow-[0_1px_2px_rgba(0,0,0,0.02)] ${
+          isDirty ? "border-[#558066] ring-1 ring-[#558066]" : "border-[#e2e2e2] hover:border-gray-300"
+        }`}
+      />
+
+      {(isDirty || justSaved) && (
         <button
           type="button"
-          onMouseDown={handleCommit}
-          className="p-1 text-[#558066] hover:bg-[#eef6f0] rounded cursor-pointer shrink-0"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            handleSave();
+          }}
+          title="Save changes"
+          className="absolute right-2 p-1 rounded-md transition-all cursor-pointer flex items-center justify-center text-[#2d563c] bg-[#eef6f0] hover:bg-[#dcefe1]"
         >
-          <Check className="w-3.5 h-3.5" />
+          <Check className="w-3.5 h-3.5 text-[#2d563c]" strokeWidth={2.5} />
         </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="inline-flex items-center gap-2 max-w-full">
-      <div
-        onClick={() => setIsEditing(true)}
-        className="inline-flex items-center gap-1.5 cursor-pointer group select-none max-w-full"
-      >
-        <p className="text-[12.5px] font-semibold text-[#080808] leading-snug group-hover:text-[#2d563c] transition-colors break-words">
-          {value || placeholder}
-        </p>
-        <Icon className="w-3.5 h-3.5 text-[#080808] group-hover:text-[#2d563c] opacity-80 group-hover:opacity-100 transition-opacity shrink-0" strokeWidth={2.2} />
-      </div>
-      <SavedBadge status={saveStatus} />
+      )}
     </div>
   );
 };
 
-// 🔽 Custom Status Dropdown matching user mockup
-const StatusDropdown = ({ value, onSelect }) => {
+// 🔽 Simple Select Box
+const SelectBox = ({ value, options = ["No", "Yes"], onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [saveStatus, setSaveStatus] = useState(null);
   const ref = useRef(null);
-  const timerRef = useRef(null);
 
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    const close = (e) => ref.current && !ref.current.contains(e.target) && setIsOpen(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
   }, []);
 
-  const handleSelectOption = async (opt) => {
-    setIsOpen(false);
-    if (opt !== value) {
-      setSaveStatus("saving");
-      try {
-        await onSelect(opt);
-        setSaveStatus("saved");
-        clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => setSaveStatus(null), 2200);
-      } catch {
-        setSaveStatus(null);
-      }
-    }
-  };
-
-  const isNeedContact = /need|contact|pending/i.test(value);
-  const isDeclined = /decline|cancel/i.test(value);
-  const colorClass = isNeedContact
-    ? "text-[#cf2d22]"
-    : isDeclined
-    ? "text-zinc-600"
-    : "text-[#487358]";
-
   return (
-    <div className="relative inline-flex items-center gap-2" ref={ref}>
+    <div className="relative w-full" ref={ref}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`inline-flex items-center gap-1.5 text-[12.5px] font-semibold cursor-pointer select-none transition-colors ${colorClass}`}
+        className="w-full bg-white border border-[#e2e2e2] rounded-[8px] px-3.5 py-2 text-[12.5px] font-medium text-[#080808] flex items-center justify-between cursor-pointer hover:border-gray-300 transition-colors shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
       >
-        <span>{value || "Confirmed"}</span>
-        {isOpen ? (
-          <ChevronUp className="w-4 h-4 text-[#080808] shrink-0" strokeWidth={2.5} />
-        ) : (
-          <ChevronDown className="w-4 h-4 text-[#080808] shrink-0" strokeWidth={2.5} />
-        )}
+        <span className="truncate">{value || options[0]}</span>
+        <ChevronDown className="w-4 h-4 text-[#555] shrink-0 ml-2" strokeWidth={2} />
       </button>
 
-      <SavedBadge status={saveStatus} />
-
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1.5 w-36 bg-white rounded-lg shadow-[0_4px_16px_rgba(0,0,0,0.12)] border border-gray-100 py-1 z-30">
-          {["Confirmed", "Need to contact", "Declined"].map((opt) => (
+        <div className="absolute left-0 top-full mt-1.5 w-full min-w-[130px] bg-white rounded-[8px] shadow-lg border border-gray-100 py-1 z-30 animate-in fade-in">
+          {options.map((opt) => (
             <div
               key={opt}
-              onClick={() => handleSelectOption(opt)}
-              className={`px-3 py-1.5 text-[12px] font-medium cursor-pointer transition-colors ${
+              onClick={() => {
+                onChange(opt);
+                setIsOpen(false);
+              }}
+              className={`px-3.5 py-2 text-[12.5px] cursor-pointer transition-colors ${
                 value === opt
-                  ? "bg-[#e5ece7] text-[#2d563c] font-semibold"
-                  : "hover:bg-zinc-50 text-zinc-700"
+                  ? "bg-[#eef6f0] text-[#2d563c] font-semibold"
+                  : "hover:bg-zinc-50 text-zinc-700 font-medium"
               }`}
             >
               {opt}
@@ -215,415 +160,128 @@ const StatusDropdown = ({ value, onSelect }) => {
   );
 };
 
-// 🔽 Custom Yes/No Dropdown for Registration Tracking
-const YesNoDropdown = ({ value, onSelect }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [saveStatus, setSaveStatus] = useState(null);
-  const ref = useRef(null);
-  const timerRef = useRef(null);
+// 📅 DatePicker Box
+const DatePickerBox = ({ value, onChange }) => {
+  const inputRef = useRef(null);
+  const displayDate = useMemo(() => formatLongDate(value), [value]);
 
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleSelectOption = async (opt) => {
-    setIsOpen(false);
-    if (opt !== value) {
-      setSaveStatus("saving");
-      try {
-        await onSelect(opt);
-        setSaveStatus("saved");
-        clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => setSaveStatus(null), 2200);
-      } catch {
-        setSaveStatus(null);
-      }
+  const handleChange = (e) => {
+    const raw = e.target.value;
+    if (!raw) {
+      onChange("-");
+      return;
     }
+    const [year, month, day] = raw.split("-");
+    const formatted = `${MONTHS[Number(month) - 1]} ${Number(day)}, ${year}`;
+    onChange(formatted);
   };
 
-  return (
-    <div className="relative inline-flex items-center gap-2" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[#080808] hover:text-[#558066] cursor-pointer select-none transition-colors"
-      >
-        <span>{value || "No"}</span>
-        {isOpen ? (
-          <ChevronUp className="w-4 h-4 text-[#080808] shrink-0" strokeWidth={2.5} />
-        ) : (
-          <ChevronDown className="w-4 h-4 text-[#080808] shrink-0" strokeWidth={2.5} />
-        )}
-      </button>
-
-      <SavedBadge status={saveStatus} />
-
-      {isOpen && (
-        <div className="absolute left-0 top-full mt-1 w-20 bg-white rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.1)] border border-gray-100 py-1 z-30">
-          {["Yes", "No"].map((opt) => (
-            <div
-              key={opt}
-              onClick={() => handleSelectOption(opt)}
-              className={`px-3 py-1 text-[12px] font-semibold cursor-pointer transition-colors ${
-                value === opt
-                  ? "bg-[#e5ece7] text-[#2d563c]"
-                  : "hover:bg-zinc-50 text-zinc-700"
-              }`}
-            >
-              {opt}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// 📅 Custom Calendar Date Picker Component
-const DatePickerField = ({ value, onSave, placeholder = "-" }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [saveStatus, setSaveStatus] = useState(null);
-  const [isManualInput, setIsManualInput] = useState(false);
-  const [manualText, setManualText] = useState(value === "-" ? "" : value);
-  const ref = useRef(null);
-  const timerRef = useRef(null);
-
-  const parseDate = (val) => {
-    if (!val || val === "-" || val === "TBD" || val === "TBA") return new Date();
-    const parsed = new Date(val);
-    if (!isNaN(parsed.getTime())) return parsed;
-    const m = String(val).match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
-    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-    return new Date();
-  };
-
-  const [viewDate, setViewDate] = useState(() => parseDate(value));
-
-  useEffect(() => {
-    setViewDate(parseDate(value));
-    setManualText(value === "-" ? "" : value);
+  const isoValue = useMemo(() => {
+    if (!value || value === "-" || value === "TBA") return "";
+    const m = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    const parsed = new Date(value);
+    if (!isNaN(parsed) && parsed.getFullYear() > 2020) {
+      return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+    }
+    return "";
   }, [value]);
 
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) {
-        setIsOpen(false);
-        setIsManualInput(false);
+  const handleOpen = () => {
+    try {
+      if (inputRef.current?.showPicker) {
+        inputRef.current.showPicker();
+      } else {
+        inputRef.current?.focus();
       }
-    };
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
-
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDayOfWeek = new Date(year, month, 1).getDay(); // 0 = Sun
-
-  const triggerSave = async (newVal) => {
-    if (newVal !== value) {
-      setSaveStatus("saving");
-      try {
-        await onSave(newVal);
-        setSaveStatus("saved");
-        clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => setSaveStatus(null), 2200);
-      } catch {
-        setSaveStatus(null);
-      }
-    }
+    } catch (_) {}
   };
-
-  const handleSelectDay = (day) => {
-    const formatted = `${MONTHS[month]} ${day}, ${year}`;
-    setIsOpen(false);
-    triggerSave(formatted);
-  };
-
-  const handleClear = () => {
-    setIsOpen(false);
-    triggerSave("-");
-  };
-
-  const handleToday = () => {
-    const now = new Date();
-    const formatted = `${MONTHS[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
-    setIsOpen(false);
-    triggerSave(formatted);
-  };
-
-  const handleManualSubmit = () => {
-    setIsManualInput(false);
-    setIsOpen(false);
-    const finalVal = manualText.trim() || "-";
-    triggerSave(finalVal);
-  };
-
-  const prevMonth = (e) => {
-    e.stopPropagation();
-    setViewDate(new Date(year, month - 1, 1));
-  };
-
-  const nextMonth = (e) => {
-    e.stopPropagation();
-    setViewDate(new Date(year, month + 1, 1));
-  };
-
-  const isSelected = (day) => {
-    if (!value || value === "-") return false;
-    const d = parseDate(value);
-    return (
-      d.getFullYear() === year &&
-      d.getMonth() === month &&
-      d.getDate() === day
-    );
-  };
-
-  const isToday = (day) => {
-    const t = new Date();
-    return (
-      t.getFullYear() === year &&
-      t.getMonth() === month &&
-      t.getDate() === day
-    );
-  };
-
-  const daysArray = [];
-  for (let i = 0; i < firstDayOfWeek; i++) {
-    daysArray.push(null);
-  }
-  for (let d = 1; d <= daysInMonth; d++) {
-    daysArray.push(d);
-  }
 
   return (
-    <div className="relative inline-flex items-center gap-2" ref={ref}>
-      <div
-        onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center gap-1.5 cursor-pointer group select-none max-w-full"
-      >
-        <p className="text-[12.5px] font-semibold text-[#080808] leading-snug group-hover:text-[#2d563c] transition-colors break-words">
-          {value || placeholder}
-        </p>
-        <Calendar className="w-3.5 h-3.5 text-[#080808] group-hover:text-[#2d563c] opacity-80 group-hover:opacity-100 transition-opacity shrink-0" strokeWidth={2.2} />
-      </div>
+    <div
+      onClick={handleOpen}
+      className="relative w-full bg-white border border-[#e2e2e2] rounded-[8px] px-3.5 py-2 text-[12.5px] font-medium text-[#080808] flex items-center justify-between shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:border-gray-300 transition-colors cursor-pointer select-none"
+    >
+      <span className="truncate">{displayDate || "-"}</span>
+      <Calendar className="w-4 h-4 text-[#666] shrink-0 ml-2 pointer-events-none" strokeWidth={1.8} />
 
-      <SavedBadge status={saveStatus} />
-
-      {isOpen && (
-        <div className="absolute left-0 top-full mt-2 z-50 bg-white rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.14)] border border-gray-100 p-3.5 w-64 select-none">
-          {isManualInput ? (
-            <div className="space-y-2.5">
-              <p className="text-[11px] font-semibold text-zinc-600">Enter custom text/deadline:</p>
-              <input
-                type="text"
-                value={manualText}
-                onChange={(e) => setManualText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleManualSubmit();
-                  if (e.key === "Escape") setIsManualInput(false);
-                }}
-                autoFocus
-                className="w-full text-[12px] font-semibold px-2 py-1 border border-[#558066] rounded outline-none"
-                placeholder="e.g. October 15, 2025 or TBA"
-              />
-              <div className="flex items-center justify-end gap-1.5 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setIsManualInput(false)}
-                  className="px-2 py-1 text-[11px] text-zinc-500 hover:text-zinc-700 cursor-pointer"
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  onClick={handleManualSubmit}
-                  className="px-2.5 py-1 text-[11px] font-semibold bg-[#558066] text-white rounded hover:bg-[#2d563c] cursor-pointer"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Header: Month & Year with navigation */}
-              <div className="flex items-center justify-between mb-3 px-1">
-                <button
-                  type="button"
-                  onClick={prevMonth}
-                  className="p-1 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded cursor-pointer"
-                  title="Previous month"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="text-[12.5px] font-bold text-zinc-800">
-                  {MONTHS[month]} {year}
-                </span>
-                <button
-                  type="button"
-                  onClick={nextMonth}
-                  className="p-1 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded cursor-pointer"
-                  title="Next month"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Weekday headers */}
-              <div className="grid grid-cols-7 gap-1 text-center mb-1">
-                {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((dayName) => (
-                  <div key={dayName} className="text-[10px] font-semibold text-zinc-400">
-                    {dayName}
-                  </div>
-                ))}
-              </div>
-
-              {/* Days grid */}
-              <div className="grid grid-cols-7 gap-1 text-center">
-                {daysArray.map((day, idx) => {
-                  if (!day) {
-                    return <div key={`empty-${idx}`} className="h-7 w-7" />;
-                  }
-                  const active = isSelected(day);
-                  const currentDay = isToday(day);
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => handleSelectDay(day)}
-                      className={`h-7 w-7 rounded-md text-[11.5px] flex items-center justify-center transition-colors cursor-pointer ${
-                        active
-                          ? "bg-[#558066] text-white font-bold shadow-sm"
-                          : currentDay
-                          ? "border border-[#558066] text-[#2d563c] font-semibold hover:bg-[#eef6f0]"
-                          : "text-zinc-700 hover:bg-zinc-100 font-medium"
-                      }`}
-                    >
-                      {day}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Footer Actions */}
-              <div className="mt-3 pt-2 border-t border-zinc-100 flex items-center justify-between text-[11px]">
-                <button
-                  type="button"
-                  onClick={handleClear}
-                  className="text-zinc-400 hover:text-red-500 cursor-pointer font-medium"
-                >
-                  Clear (-)
-                </button>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsManualInput(true)}
-                    className="text-zinc-500 hover:text-[#2d563c] cursor-pointer"
-                  >
-                    Custom
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleToday}
-                    className="text-[#558066] font-semibold hover:text-[#2d563c] cursor-pointer"
-                  >
-                    Today
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      )}
+      <input
+        ref={inputRef}
+        type="date"
+        value={isoValue}
+        onChange={handleChange}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleOpen();
+        }}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          opacity: 0,
+          cursor: "pointer",
+        }}
+      />
     </div>
   );
 };
 
-const EventDetail = ({ event: propEvent, onBack: propOnBack }) => {
+const EventDetail = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { id } = useParams();
+  const location = useLocation();
 
-  // Find event from props or router state
-  const event = useMemo(() => {
-    if (propEvent) return propEvent;
+  const initialEvent = useMemo(() => {
     if (location.state?.event) return location.state.event;
+    try {
+      const stored = sessionStorage.getItem("allEvents");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const match = (parsed || []).find((e) => String(e.id) === String(id));
+        if (match) return match;
+      }
+    } catch (_) {}
     return null;
-  }, [propEvent, location.state]);
+  }, [id, location.state]);
 
-  const handleBack = () => (propOnBack ? propOnBack() : navigate("/"));
+  const [formData, setFormData] = useState({
+    status: initialEvent?.status || "Confirmed",
+    outreach_timing: initialEvent?.outreach_timing || initialEvent?.outreachTiming || "-",
+    proposal_deadline: initialEvent?.proposal_deadline || initialEvent?.proposalDeadline || "-",
+    registration_deadline: initialEvent?.registration_deadline || initialEvent?.registration_deadline || "-",
+    exhibit_registered: initialEvent?.exhibit_registered || initialEvent?.exhibitRegistered || "No",
+    payment_completed: initialEvent?.payment_completed || initialEvent?.paymentCompleted || "No",
+    set_up_time: initialEvent?.set_up_time || initialEvent?.setUpTime || (initialEvent?.time && initialEvent?.time !== "TBA" ? initialEvent.time : "TBD"),
+    electricity_ordered: initialEvent?.electricity_ordered || initialEvent?.electricityOrdered || "No",
+    misc_info: initialEvent?.misc_info || initialEvent?.miscInfo || "-",
+    notes: initialEvent?.notes || initialEvent?.description || "-",
+  });
 
-  // Interactive local states synced with event
-  const [status, setStatus] = useState(event?.status || "Confirmed");
-  const [outreachTiming, setOutreachTiming] = useState(event?.outreachTiming || event?.outreach_timing || "-");
-  const [proposalDeadline, setProposalDeadline] = useState(event?.proposalDeadline || event?.proposal_deadline || "-");
-  const [registrationDeadline, setRegistrationDeadline] = useState(event?.registrationDeadline || event?.registration_deadline || "-");
-  const [exhibitRegistered, setExhibitRegistered] = useState(event?.exhibitRegistered || event?.exhibit_registered || "No");
-  const [paymentCompleted, setPaymentCompleted] = useState(event?.paymentCompleted || event?.payment_completed || "No");
-  const [electricityOrdered, setElectricityOrdered] = useState(
-    event?.electricityOrdered === "Yes" || event?.electricityOrdered === true || event?.electricity_ordered === "Yes"
-  );
-  const [setUpTime, setSetUpTime] = useState(
-    event?.setUpTime ||
-    event?.set_up_time ||
-    event?.setupTime ||
-    (event?.time && event?.time !== "TBA" ? event?.time : "TBD")
-  );
-  const [miscInfo, setMiscInfo] = useState(event?.miscInfo || event?.misc_info || "-");
+  const [savedField, setSavedField] = useState(null);
+  const saveTimerRef = useRef(null);
 
-  // Keep state synced if event prop changes
-  useEffect(() => {
-    if (event) {
-      setStatus(event.status || "Confirmed");
-      setOutreachTiming(event.outreachTiming || event.outreach_timing || "-");
-      setProposalDeadline(event.proposalDeadline || event.proposal_deadline || "-");
-      setRegistrationDeadline(event.registrationDeadline || event.registration_deadline || "-");
-      setExhibitRegistered(event.exhibitRegistered || event.exhibit_registered || "No");
-      setPaymentCompleted(event.paymentCompleted || event.payment_completed || "No");
-      setElectricityOrdered(
-        event.electricityOrdered === "Yes" || event.electricityOrdered === true || event.electricity_ordered === "Yes"
-      );
-      setSetUpTime(
-        event.setUpTime ||
-        event.set_up_time ||
-        event.setupTime ||
-        (event.time && event.time !== "TBA" ? event.time : "TBD")
-      );
-      setMiscInfo(event.miscInfo || event.misc_info || "-");
-    }
-  }, [event]);
+  const handleBack = () => {
+    sessionStorage.setItem("restoreScroll", "true");
+    navigate("/", { replace: true });
+  };
 
-  if (!event) {
+  if (!initialEvent) {
     return (
       <div className="flex h-screen overflow-hidden bg-[#f1f1f1] text-[#1a1a1a] font-sans antialiased">
-        <Sidebar
-          activeTab="events"
-          onTabChange={(tab) => (tab === "events" ? handleBack() : null)}
-        />
-        <div className="flex-1 min-w-0 h-full overflow-y-auto flex flex-col pl-[25px] pr-[25px] pt-5 pb-5">
+        <Sidebar activeTab="events" onTabChange={(tab) => (tab === "events" ? handleBack() : null)} />
+        <div className="flex-1 min-w-0 h-full overflow-y-auto flex flex-col p-6">
           <button
             type="button"
             onClick={handleBack}
-            className="inline-flex items-center gap-1 text-[12px] text-[#558066] hover:text-[#2d563c] font-medium transition-colors cursor-pointer group"
+            className="inline-flex items-center gap-1 text-[12px] text-[#558066] hover:text-[#2d563c] font-medium transition-colors cursor-pointer"
           >
-            <ChevronLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
-            <span>Back to Events</span>
+            <ChevronLeft className="w-3.5 h-3.5" />
+            <span>Back</span>
           </button>
-          <div className="mt-12 bg-white rounded-[14px] p-10 text-center shadow-[0_0_2.5px_rgba(0,0,0,0.08),inset_0_0_0_1px_rgba(8,8,8,0.04)] max-w-md mx-auto">
-            <p className="text-[15px] font-bold text-[#141414]">
-              Event Not Found
-            </p>
-            <p className="text-[12px] text-[rgba(68,67,67,0.78)] mt-1.5 mb-6">
-              The requested event could not be found.
-            </p>
+          <div className="mt-12 bg-white rounded-[14px] p-10 text-center shadow max-w-md mx-auto">
+            <p className="text-[15px] font-bold text-[#141414]">Event Not Found</p>
+            <p className="text-[12px] text-[rgba(68,67,67,0.78)] mt-1.5 mb-6">The requested event could not be found.</p>
             <button
               type="button"
               onClick={handleBack}
@@ -637,60 +295,33 @@ const EventDetail = ({ event: propEvent, onBack: propOnBack }) => {
     );
   }
 
-  const fullLocation =
-    [event.location || event.city, event.venue].filter(Boolean).join(" — ") ||
-    "-";
-  const rawContact = String(event.contactInfo || event.email || "").trim();
-  const contact =
-    !rawContact || /not available|n\/a|^-$/i.test(rawContact)
-      ? event.ticketUrl && !event.ticketUrl.includes("google.com/search")
-        ? event.ticketUrl
-        : event.link || null
-      : rawContact;
+  // Unified save handler
+  const saveField = async (key, val) => {
+    setFormData((prev) => ({ ...prev, [key]: val }));
+    setSavedField(key);
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => setSavedField(null), 2000);
+
+    try {
+      await updateEventApi(initialEvent.id, { [key]: val });
+    } catch (err) {
+      console.error("Save error:", err);
+    }
+  };
+
+  const fullLocation = [initialEvent.location || initialEvent.city, initialEvent.venue].filter(Boolean).join(" — ") || "-";
+  const rawContact = String(initialEvent.contactInfo || initialEvent.email || "").trim();
+  const contact = !rawContact || /not available|n\/a|^-$/i.test(rawContact)
+    ? initialEvent.ticketUrl && !initialEvent.ticketUrl.includes("google.com/search")
+      ? initialEvent.ticketUrl
+      : initialEvent.link || null
+    : rawContact;
   const isEmail = contact?.includes("@") && !contact?.startsWith("http");
   const isUrl = contact?.startsWith("http");
 
-  const [electricitySaveStatus, setElectricitySaveStatus] = useState(null);
-  const electricityTimerRef = useRef(null);
-
-  // Save handler for backend API
-  const saveField = async (fieldKey, value) => {
-    try {
-      const res = await updateEventApi(event.id, { [fieldKey]: value });
-      return res;
-    } catch (err) {
-      console.error("Save error:", err);
-      throw err;
-    }
-  };
-
-  const handleStatusSelect = (newStatus) => {
-    setStatus(newStatus);
-    return saveField("status", newStatus);
-  };
-
-  const handleToggleElectricity = async (e) => {
-    const checked = e.target.checked;
-    setElectricityOrdered(checked);
-    setElectricitySaveStatus("saving");
-    try {
-      await saveField("electricity_ordered", checked ? "Yes" : "No");
-      setElectricitySaveStatus("saved");
-      clearTimeout(electricityTimerRef.current);
-      electricityTimerRef.current = setTimeout(() => {
-        setElectricitySaveStatus(null);
-      }, 2200);
-    } catch {
-      setElectricitySaveStatus(null);
-    }
-  };
-
   return (
     <div className="flex h-screen overflow-hidden bg-[#f1f1f1] text-[#1a1a1a] font-sans antialiased">
-      <Sidebar
-        activeTab="events"
-        onTabChange={(tab) => (tab === "events" ? handleBack() : null)}
-      />
+      <Sidebar activeTab="events" onTabChange={(tab) => (tab === "events" ? handleBack() : null)} />
       <div className="flex-1 min-w-0 h-full overflow-y-auto flex flex-col pl-[25px] pr-[25px] pt-5 pb-5">
         <div>
           <button
@@ -704,160 +335,112 @@ const EventDetail = ({ event: propEvent, onBack: propOnBack }) => {
         </div>
 
         <h1 className="mt-2 text-[17px] font-bold text-[#141414] tracking-tight">
-          {event.title || event.name || "Untitled Event"}
+          {initialEvent.title || initialEvent.name || "Untitled Event"}
         </h1>
 
         <div className="mt-5 space-y-4 w-full">
           {/* Card 1: Core Information */}
           <DetailCard title="Core Information">
-            <InfoField label="Event Name" value={event.title || event.name} />
-            <InfoField
-              label="Event Type"
-              value={event.type || event.category}
-            />
-            <InfoField
-              label="Organization"
-              value={event.organization || event.organizer || event.source}
-            />
-            <InfoField label="Date" value={formatLongDate(event.date)} />
+            <InfoField label="Event Name" value={initialEvent.title || initialEvent.name} />
+            <InfoField label="Event Type" value={initialEvent.type || initialEvent.category} />
+            <InfoField label="Organization" value={initialEvent.organization || initialEvent.organizer || initialEvent.source} />
+            <InfoField label="Date" value={formatLongDate(initialEvent.date)} />
             <InfoField label="Location" value={fullLocation} />
-            <InfoField label="Audience Type" value={event.audienceType} />
-            <InfoField
-              label="Opportunity Type"
-              value={event.opportunityType || event.category || event.type}
-            />
+            <InfoField label="Audience Type" value={initialEvent.audienceType} />
+            <InfoField label="Opportunity Type" value={initialEvent.opportunityType || initialEvent.category || initialEvent.type} />
             <InfoField label="Contact Info">
               {isEmail ? (
-                <a
-                  href={`mailto:${contact}`}
-                  className="text-[12.5px] font-semibold text-[#487358] hover:underline"
-                >
+                <a href={`mailto:${contact}`} className="text-[12.5px] font-medium text-[#487358] underline hover:text-[#2d563c]">
                   {contact}
                 </a>
               ) : isUrl ? (
-                <a
-                  href={contact}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[12.5px] font-semibold text-[#487358] hover:underline inline-flex items-center gap-1"
-                >
+                <a href={contact} target="_blank" rel="noreferrer" className="text-[12.5px] font-medium text-[#487358] underline hover:text-[#2d563c] inline-flex items-center gap-1">
                   <span>Visit Event Page</span>
                   <ExternalLink className="w-3 h-3" />
                 </a>
               ) : (
-                <p className="text-[12.5px] font-semibold text-[#080808]">
-                  {contact || "-"}
-                </p>
+                <p className="text-[12.5px] font-bold text-[#080808]">{contact || "-"}</p>
               )}
             </InfoField>
-            <InfoField label="Status">
-              <StatusDropdown
-                value={status}
-                onSelect={handleStatusSelect}
+            <InfoField label="Status" showSaved={savedField === "status"}>
+              <SelectBox
+                value={formData.status}
+                options={["Confirmed", "Need to contact", "Declined"]}
+                onChange={(val) => saveField("status", val)}
               />
             </InfoField>
-            <InfoField label="Notes" className="col-span-full">
-              <p className="text-[12.5px] text-[#444343] leading-relaxed">
-                {event.notes || event.description || "-"}
-              </p>
+            <InfoField label="Notes" showSaved={savedField === "notes"} className="col-span-full">
+              <InputBox
+                value={formData.notes}
+                onChange={(val) => saveField("notes", val)}
+                placeholder="Add notes..."
+              />
             </InfoField>
           </DetailCard>
 
           {/* Card 2: Planning */}
           <DetailCard title="Planning">
-            <InfoField label="Outreach Timing">
-              <EditableText
-                value={outreachTiming}
-                onSave={(val) => {
-                  setOutreachTiming(val);
-                  return saveField("outreach_timing", val);
-                }}
-                icon={Pencil}
+            <InfoField label="Outreach Timing" showSaved={savedField === "outreach_timing"}>
+              <InputBox
+                value={formData.outreach_timing}
+                onChange={(val) => saveField("outreach_timing", val)}
+                placeholder="e.g. Q3 2025"
               />
             </InfoField>
-            <InfoField label="Presentation Proposal Deadline">
-              <DatePickerField
-                value={proposalDeadline}
-                onSave={(val) => {
-                  setProposalDeadline(val);
-                  return saveField("proposal_deadline", val);
-                }}
+            <InfoField label="Presentation Proposal Deadline" showSaved={savedField === "proposal_deadline"}>
+              <DatePickerBox
+                value={formData.proposal_deadline}
+                onChange={(val) => saveField("proposal_deadline", val)}
               />
             </InfoField>
-            <InfoField label="Exhibit Registration Deadline">
-              <EditableText
-                value={registrationDeadline}
-                onSave={(val) => {
-                  setRegistrationDeadline(val);
-                  return saveField("registration_deadline", val);
-                }}
-                icon={Pencil}
+            <InfoField label="Exhibit Registration Deadline" showSaved={savedField === "registration_deadline"}>
+              <InputBox
+                value={formData.registration_deadline}
+                onChange={(val) => saveField("registration_deadline", val)}
+                placeholder="e.g. TBD"
               />
             </InfoField>
           </DetailCard>
 
           {/* Card 3: Registration Tracking */}
           <DetailCard title="Registration Tracking">
-            <InfoField label="Exhibit Registered?">
-              <YesNoDropdown
-                value={exhibitRegistered}
-                onSelect={(val) => {
-                  setExhibitRegistered(val);
-                  return saveField("exhibit_registered", val);
-                }}
+            <InfoField label="Exhibit Registered?" showSaved={savedField === "exhibit_registered"}>
+              <SelectBox
+                value={formData.exhibit_registered}
+                options={["No", "Yes"]}
+                onChange={(val) => saveField("exhibit_registered", val)}
               />
             </InfoField>
-            <InfoField label="Payment Completed?">
-              <YesNoDropdown
-                value={paymentCompleted}
-                onSelect={(val) => {
-                  setPaymentCompleted(val);
-                  return saveField("payment_completed", val);
-                }}
+            <InfoField label="Payment Completed?" showSaved={savedField === "payment_completed"}>
+              <SelectBox
+                value={formData.payment_completed}
+                options={["No", "Yes"]}
+                onChange={(val) => saveField("payment_completed", val)}
               />
             </InfoField>
           </DetailCard>
 
           {/* Card 4: Logistics */}
           <DetailCard title="Logistics">
-            <InfoField label="Set-up Time">
-              <EditableText
-                value={setUpTime}
-                onSave={(val) => {
-                  setSetUpTime(val);
-                  return saveField("set_up_time", val);
-                }}
-                icon={Pencil}
+            <InfoField label="Set-up Time" showSaved={savedField === "set_up_time"}>
+              <InputBox
+                value={formData.set_up_time}
+                onChange={(val) => saveField("set_up_time", val)}
+                placeholder="TBD"
               />
             </InfoField>
-            <InfoField label="Electricity Ordered?">
-              <div className="inline-flex items-center gap-2">
-                <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={electricityOrdered}
-                    onChange={handleToggleElectricity}
-                    className="w-4 h-4 rounded border-gray-300 text-[#487358] focus:ring-[#487358] cursor-pointer"
-                  />
-                  <span
-                    className={`text-[12.5px] font-semibold ${
-                      electricityOrdered ? "text-[#487358]" : "text-[#777]"
-                    }`}
-                  >
-                    {electricityOrdered ? "Yes" : "No"}
-                  </span>
-                </label>
-                <SavedBadge status={electricitySaveStatus} />
-              </div>
+            <InfoField label="Electricity Ordered?" showSaved={savedField === "electricity_ordered"}>
+              <SelectBox
+                value={formData.electricity_ordered}
+                options={["No", "Yes"]}
+                onChange={(val) => saveField("electricity_ordered", val)}
+              />
             </InfoField>
-            <InfoField label="Misc Info">
-              <EditableText
-                value={miscInfo}
-                onSave={(val) => {
-                  setMiscInfo(val);
-                  return saveField("misc_info", val);
-                }}
-                icon={Pencil}
+            <InfoField label="Misc Info" showSaved={savedField === "misc_info"}>
+              <InputBox
+                value={formData.misc_info}
+                onChange={(val) => saveField("misc_info", val)}
+                placeholder="Add misc info..."
               />
             </InfoField>
           </DetailCard>
@@ -865,17 +448,11 @@ const EventDetail = ({ event: propEvent, onBack: propOnBack }) => {
 
         {/* Footer */}
         <footer className="mt-12 pt-5 pb-2 border-t border-[rgba(8,8,8,0.08)] flex items-center justify-between text-[11px] text-[rgba(68,67,67,0.7)] select-none">
-          <p>© 2026, eventscout, All Rights Reserved.</p>
+          <p>© 2026, eventscout. All Rights Reserved.</p>
           <div className="flex items-center gap-6">
-            <a href="#" className="hover:text-black transition-colors">
-              License
-            </a>
-            <a href="#" className="hover:text-black transition-colors">
-              Terms of Use
-            </a>
-            <a href="#" className="hover:text-black transition-colors">
-              Privacy Policy
-            </a>
+            <a href="#" className="hover:text-black transition-colors">License</a>
+            <a href="#" className="hover:text-black transition-colors">Terms of Use</a>
+            <a href="#" className="hover:text-black transition-colors">Privacy Policy</a>
           </div>
         </footer>
       </div>
