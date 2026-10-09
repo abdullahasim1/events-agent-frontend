@@ -208,7 +208,7 @@ const Home = () => {
 
         <EventTable
           events={filteredEvents}
-          loading={loading && events.length === 0}
+          loading={(loading || isRunning) && events.length === 0}
           onViewEvent={handleViewEvent}
         />
       </div>
