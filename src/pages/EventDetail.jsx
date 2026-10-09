@@ -310,14 +310,19 @@ const EventDetail = () => {
   };
 
   const fullLocation = [initialEvent.location || initialEvent.city, initialEvent.venue].filter(Boolean).join(" — ") || "-";
-  const rawContact = String(initialEvent.contactInfo || initialEvent.email || "").trim();
-  const contact = !rawContact || /not available|n\/a|^-$/i.test(rawContact)
-    ? initialEvent.ticketUrl && !initialEvent.ticketUrl.includes("google.com/search")
+  const rawContact = String(initialEvent.contactInfo || initialEvent.contact_info || initialEvent.email || "").trim();
+  const contact = !rawContact || /not available|n\/a|^-$|^#$/i.test(rawContact)
+    ? initialEvent.ticketUrl && !initialEvent.ticketUrl.includes("google.com/search") && initialEvent.ticketUrl !== "#"
       ? initialEvent.ticketUrl
-      : initialEvent.link || null
+      : initialEvent.ticket_url && !initialEvent.ticket_url.includes("google.com/search") && initialEvent.ticket_url !== "#"
+      ? initialEvent.ticket_url
+      : initialEvent.link && initialEvent.link !== "#"
+      ? initialEvent.link
+      : null
     : rawContact;
   const isEmail = contact?.includes("@") && !contact?.startsWith("http");
   const isUrl = contact?.startsWith("http");
+  const audience = initialEvent.audienceType || initialEvent.audience_type || "-";
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#f1f1f1] text-[#1a1a1a] font-sans antialiased">
@@ -346,8 +351,8 @@ const EventDetail = () => {
             <InfoField label="Organization" value={initialEvent.organization || initialEvent.organizer || initialEvent.source} />
             <InfoField label="Date" value={formatLongDate(initialEvent.date)} />
             <InfoField label="Location" value={fullLocation} />
-            <InfoField label="Audience Type" value={initialEvent.audienceType} />
-            <InfoField label="Opportunity Type" value={initialEvent.opportunityType || initialEvent.category || initialEvent.type} />
+            <InfoField label="Audience Type" value={audience} />
+            <InfoField label="Opportunity Type" value={initialEvent.opportunityType || initialEvent.opportunity_type || initialEvent.category || initialEvent.type} />
             <InfoField label="Contact Info">
               {isEmail ? (
                 <a href={`mailto:${contact}`} className="text-[12.5px] font-medium text-[#487358] underline hover:text-[#2d563c]">
