@@ -56,7 +56,7 @@ export const Select = ({
           );
         })}
       </select>
-      <ChevronDown className={`w-3.5 h-3.5 text-[#7a7a7a] absolute right-2.5 pointer-events-none ${caretClassName}`} />
+      <ChevronDown className={`w-4 h-4 text-[#080808] absolute right-2.5 pointer-events-none ${caretClassName}`} strokeWidth={2.5} />
     </div>
   </div>
 );

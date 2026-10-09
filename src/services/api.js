@@ -54,6 +54,22 @@ export const clearSavedEventsApi = async () => {
   }
 };
 
+export const updateEventApi = async (id, fields) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/events/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(fields),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.success ? data.event : null;
+  } catch (err) {
+    console.warn("Could not update event:", err.message);
+    return null;
+  }
+};
+
 export const runDefaultAgent = async ({ startDate = null } = {}) => {
   const res = await fetch(`${API_BASE_URL}/events`, {
     method: "POST",
